@@ -218,7 +218,7 @@ export default function Game() {
                 <img src={PLANTS[plant.type].image} alt={PLANTS[plant.type].name} draggable={false} />
                 {plant.health < shooter.health && <span className="health"><i style={{ width: `${plant.health / shooter.health * 100}%` }} /></span>}
               </div>)}
-              {zombies.map((zombie) => <div className={`zombie entity ${zombie.biting ? 'biting' : ''} ${zombie.hitUntil > elapsed ? 'hit' : ''}`} key={zombie.uid} style={{ left: `${(zombie.x + .5) / COLS * 100}%`, top: `${(zombie.row + .5) / ROWS * 100}%` }}>
+              {zombies.map((zombie) => <div className={`zombie entity ${zombie.biting ? 'biting' : ''} ${zombie.hitUntil > elapsed ? 'hit' : ''}`} key={zombie.uid} style={{ left: `${(zombie.x + .5) / COLS * 100}%`, top: `${(zombie.row + 1) / ROWS * 100}%` }}>
                 <img src={ZOMBIES[zombie.type].image} alt={ZOMBIES[zombie.type].name} draggable={false} />
                 <span className="health enemy-health"><i style={{ width: `${Math.max(0, zombie.health / shambler.health * 100)}%` }} /></span>
               </div>)}
