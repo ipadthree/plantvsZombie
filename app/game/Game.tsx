@@ -207,9 +207,10 @@ export default function Game() {
             <span className="eyebrow">DAY 01 · HOME TURF</span>
             <div className="wave"><span>SHUFFLE</span><b>{String(Math.min(spawned + 1, TARGET_KILLS)).padStart(2, '0')}</b><i><u style={{ width: `${progress}%` }} /></i><strong>{kills}/{TARGET_KILLS}</strong></div>
           </div>
-          <div className={`lawn ${selected ? 'placing' : ''}`} aria-label="Five by nine garden defense grid">
-            <div className="house-edge" />
-            <div className="entity-layer">
+          <div className="yard-scene" aria-label="Cartoon view of the family front yard">
+            <div className={`lawn ${selected ? 'placing' : ''}`} aria-label="Five by nine garden defense grid">
+              <div className="house-edge" />
+              <div className="entity-layer">
               {Array.from({ length: ROWS }, (_, row) => Array.from({ length: COLS }, (__, col) => (
                 <button className="tile" key={`${row}-${col}`} onClick={() => placePlant(row, col)} aria-label={`Plant at lane ${row + 1}, tile ${col + 1}`} />
               )))}
@@ -224,13 +225,14 @@ export default function Game() {
               </div>)}
               {projectiles.map((shot) => <span className="pea" key={shot.uid} style={{ left: `${(shot.x + .5) / COLS * 100}%`, top: `${(shot.row + .5) / ROWS * 100}%` }} />)}
               {suns.map((sun) => <button className="falling-sun" key={sun.uid} style={{ left: `${sun.x}%`, top: `${sun.y}%` }} onClick={() => collectSun(sun)} aria-label={`Collect ${sun.value} sun`}>☀<small>+{sun.value}</small></button>)}
+              </div>
+              {status !== 'playing' && <div className="game-overlay">
+                <span>{status === 'paused' ? 'FIELD BREAK' : status === 'won' ? 'YARD SECURED' : 'PORCH OVERRUN'}</span>
+                <h1>{status === 'paused' ? 'Game paused' : status === 'won' ? 'Nice gardening.' : 'The shufflers got through.'}</h1>
+                <p>{status === 'paused' ? 'Take a breath. The backyard will wait.' : `${kills} of ${TARGET_KILLS} shufflers cleared.`}</p>
+                <button onClick={status === 'paused' ? togglePause : restart}>{status === 'paused' ? 'Keep defending' : 'Try again'}</button>
+              </div>}
             </div>
-            {status !== 'playing' && <div className="game-overlay">
-              <span>{status === 'paused' ? 'FIELD BREAK' : status === 'won' ? 'YARD SECURED' : 'PORCH OVERRUN'}</span>
-              <h1>{status === 'paused' ? 'Game paused' : status === 'won' ? 'Nice gardening.' : 'The shufflers got through.'}</h1>
-              <p>{status === 'paused' ? 'Take a breath. The backyard will wait.' : `${kills} of ${TARGET_KILLS} shufflers cleared.`}</p>
-              <button onClick={status === 'paused' ? togglePause : restart}>{status === 'paused' ? 'Keep defending' : 'Try again'}</button>
-            </div>}
           </div>
           <div className="stage-footer" role="status" aria-live="polite">
             <span><kbd>1</kbd> Pick plant</span><span><kbd>Click</kbd> Place</span><span><kbd>Space</kbd> Pause</span>
