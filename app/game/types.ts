@@ -1,5 +1,6 @@
-export type PlantId = 'sprout-scout';
+export type PlantId = 'sprout-scout' | 'stone-shooter';
 export type ZombieId = 'pothead-shambler';
+export type ProjectileKind = 'pea' | 'rock';
 
 export type PlantDefinition = {
   id: PlantId;
@@ -9,6 +10,9 @@ export type PlantDefinition = {
   health: number;
   fireRateMs: number;
   projectileDamage: number;
+  projectileKind: ProjectileKind;
+  projectilesPerVolley: number;
+  projectileSpeed: number;
   image: string;
 };
 
@@ -47,6 +51,8 @@ export type ProjectileEntity = {
   row: number;
   x: number;
   damage: number;
+  kind: ProjectileKind;
+  speed: number;
 };
 
 export type SunEntity = {
@@ -55,4 +61,3 @@ export type SunEntity = {
   y: number;
   value: number;
 };
-

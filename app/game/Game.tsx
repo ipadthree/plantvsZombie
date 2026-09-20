@@ -2,13 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PLANTS, ZOMBIES } from './catalog';
-import type { PlantEntity, ProjectileEntity, SunEntity, ZombieEntity } from './types';
+import type { PlantEntity, PlantId, ProjectileEntity, SunEntity, ZombieEntity } from './types';
 
 const ROWS = 5;
 const COLS = 9;
 const TARGET_KILLS = 12;
 const TICK_MS = 50;
-const shooter = PLANTS['sprout-scout'];
 const shambler = ZOMBIES['pothead-shambler'];
 
 type GameStatus = 'playing' | 'paused' | 'won' | 'lost';
@@ -19,7 +18,7 @@ export default function Game() {
   const [zombies, setZombies] = useState<ZombieEntity[]>([]);
   const [projectiles, setProjectiles] = useState<ProjectileEntity[]>([]);
   const [suns, setSuns] = useState<SunEntity[]>([]);
-  const [selected, setSelected] = useState(true);
+  const [selectedPlant, setSelectedPlant] = useState<PlantId | null>('sprout-scout');
   const [status, setStatus] = useState<GameStatus>('playing');
   const [kills, setKills] = useState(0);
   const [spawned, setSpawned] = useState(0);
@@ -33,7 +32,7 @@ export default function Game() {
   const restart = useCallback(() => {
     setEnergy(150); setPlants([]); setZombies([]); setProjectiles([]); setSuns([]);
     setStatus('playing'); setKills(0); setSpawned(0); setElapsed(0);
-    setMowers(Array(ROWS).fill(true)); setSelected(true);
+    setMowers(Array(ROWS).fill(true)); setSelectedPlant('sprout-scout');
     setNotice('Pick a plant, then choose a tile.');
     lastSpawnAt.current = 0; lastSunAt.current = 0;
   }, []);
@@ -44,8 +43,9 @@ export default function Game() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === '1') setSelected(true);
-      if (event.key === 'Escape') setSelected(false);
+      if (event.key === '1') setSelectedPlant('sprout-scout');
+      if (event.key === '2') setSelectedPlant('stone-shooter');
+      if (event.key === 'Escape') setSelectedPlant(null);
       if (event.key === ' ') { event.preventDefault(); togglePause(); }
       if (event.key.toLowerCase() === 'r' && (status === 'won' || status === 'lost')) restart();
     };
@@ -87,13 +87,20 @@ export default function Game() {
       }).filter((plant) => plant.health > 0);
 
       damaged.forEach((plant) => {
+        const definition = PLANTS[plant.type];
         const hasTarget = zombies.some((zombie) => zombie.row === plant.row && zombie.x > plant.col + 0.15);
-        if (hasTarget && elapsed - plant.lastShotAt >= shooter.fireRateMs) {
+        if (hasTarget && elapsed - plant.lastShotAt >= definition.fireRateMs) {
           plant.lastShotAt = elapsed;
           plant.pulseUntil = elapsed + 180;
-          setProjectiles((current) => [...current, {
-            uid: serial.current++, row: plant.row, x: plant.col + 0.78, damage: shooter.projectileDamage,
-          }]);
+          const volley = Array.from({ length: definition.projectilesPerVolley }, (_, index) => ({
+            uid: serial.current++,
+            row: plant.row,
+            x: plant.col + 0.78 - index * 0.22,
+            damage: definition.projectileDamage,
+            kind: definition.projectileKind,
+            speed: definition.projectileSpeed,
+          }));
+          setProjectiles((current) => [...current, ...volley]);
         }
       });
       return [...damaged];
@@ -121,7 +128,7 @@ export default function Game() {
     });
 
     setProjectiles((currentShots) => {
-      const moved = currentShots.map((shot) => ({ ...shot, x: shot.x + 1.85 * TICK_MS / 1000 }));
+      const moved = currentShots.map((shot) => ({ ...shot, x: shot.x + shot.speed * TICK_MS / 1000 }));
       const consumed = new Set<number>();
       const hits = new Map<number, number>();
       moved.forEach((shot) => {
@@ -156,14 +163,15 @@ export default function Game() {
   }, [kills, spawned, status, zombies.length]);
 
   const placePlant = (row: number, col: number) => {
-    if (status !== 'playing' || !selected) return;
+    if (status !== 'playing' || !selectedPlant) return;
+    const definition = PLANTS[selectedPlant];
     if (plants.some((plant) => plant.row === row && plant.col === col)) { setNotice('That patch is already occupied.'); return; }
-    if (energy < shooter.cost) { setNotice(`You need ${shooter.cost - energy} more sun.`); return; }
-    setEnergy((value) => value - shooter.cost);
+    if (energy < definition.cost) { setNotice(`You need ${definition.cost - energy} more sun.`); return; }
+    setEnergy((value) => value - definition.cost);
     setPlants((current) => [...current, {
-      uid: serial.current++, type: shooter.id, row, col, health: shooter.health, lastShotAt: elapsed - 600, pulseUntil: 0,
+      uid: serial.current++, type: definition.id, row, col, health: definition.health, lastShotAt: elapsed - 600, pulseUntil: 0,
     }]);
-    setNotice(`Sprout Scout planted in lane ${row + 1}.`);
+    setNotice(`${definition.name} planted in lane ${row + 1}.`);
   };
 
   const collectSun = (sun: SunEntity) => {
@@ -189,17 +197,17 @@ export default function Game() {
       <section className="game-wrap">
         <aside className="seed-bar">
           <div className="sun-counter"><span>☀</span><b>{energy}</b></div>
-          <button className={`seed-card ${selected ? 'selected' : ''} ${energy < shooter.cost ? 'unaffordable' : ''}`} onClick={() => setSelected((value) => !value)} aria-pressed={selected}>
-            <img src={shooter.image} alt="" />
-            <span><b>{shooter.name}</b><small>Rapid seed shots</small></span>
-            <em>{shooter.cost}</em>
+          <button className={`seed-card ${selectedPlant === 'sprout-scout' ? 'selected' : ''} ${energy < PLANTS['sprout-scout'].cost ? 'unaffordable' : ''}`} onClick={() => setSelectedPlant((value) => value === 'sprout-scout' ? null : 'sprout-scout')} aria-pressed={selectedPlant === 'sprout-scout'}>
+            <img src={PLANTS['sprout-scout'].image} alt="" />
+            <span><b>{PLANTS['sprout-scout'].name}</b><small>Rapid seed shots</small></span>
+            <em>{PLANTS['sprout-scout'].cost}</em>
           </button>
-          <button className="seed-card locked" disabled>
-            <span className="seed-placeholder">?</span>
-            <span><b>Custom slot</b><small>Your next plant</small></span>
-            <em>—</em>
+          <button className={`seed-card ${selectedPlant === 'stone-shooter' ? 'selected' : ''} ${energy < PLANTS['stone-shooter'].cost ? 'unaffordable' : ''}`} onClick={() => setSelectedPlant((value) => value === 'stone-shooter' ? null : 'stone-shooter')} aria-pressed={selectedPlant === 'stone-shooter'}>
+            <img src={PLANTS['stone-shooter'].image} alt="" />
+            <span><b>{PLANTS['stone-shooter'].name}</b><small>Double rock volley</small></span>
+            <em>{PLANTS['stone-shooter'].cost}</em>
           </button>
-          <div className="field-notes"><b>FIELD NOTES</b><p>Collect falling sun. Scouts fire automatically when a shambler enters their lane.</p></div>
+          <div className="field-notes"><b>FIELD NOTES</b><p>Scouts fire fast. Stone Shooters have 150 health and launch two rocks per volley.</p></div>
         </aside>
 
         <div className="stage-frame">
@@ -208,22 +216,25 @@ export default function Game() {
             <div className="wave"><span>SHUFFLE</span><b>{String(Math.min(spawned + 1, TARGET_KILLS)).padStart(2, '0')}</b><i><u style={{ width: `${progress}%` }} /></i><strong>{kills}/{TARGET_KILLS}</strong></div>
           </div>
           <div className="yard-scene" aria-label="Cartoon view of the family front yard">
-            <div className={`lawn ${selected ? 'placing' : ''}`} aria-label="Five by nine garden defense grid">
+            <div className={`lawn ${selectedPlant ? 'placing' : ''}`} aria-label="Five by nine garden defense grid">
               <div className="house-edge" />
               <div className="entity-layer">
               {Array.from({ length: ROWS }, (_, row) => Array.from({ length: COLS }, (__, col) => (
                 <button className="tile" key={`${row}-${col}`} onClick={() => placePlant(row, col)} aria-label={`Plant at lane ${row + 1}, tile ${col + 1}`} />
               )))}
               {mowers.map((ready, row) => ready && <div className="mower" key={row} style={{ top: `${(row + .5) / ROWS * 100}%` }}>⇥</div>)}
-              {plants.map((plant) => <div className={`plant entity ${plant.pulseUntil > elapsed ? 'firing' : ''}`} key={plant.uid} style={{ left: `${(plant.col + .5) / COLS * 100}%`, top: `${(plant.row + .5) / ROWS * 100}%` }}>
-                <img src={PLANTS[plant.type].image} alt={PLANTS[plant.type].name} draggable={false} />
-                {plant.health < shooter.health && <span className="health"><i style={{ width: `${plant.health / shooter.health * 100}%` }} /></span>}
-              </div>)}
+              {plants.map((plant) => {
+                const definition = PLANTS[plant.type];
+                return <div className={`plant entity ${plant.pulseUntil > elapsed ? 'firing' : ''}`} key={plant.uid} style={{ left: `${(plant.col + .5) / COLS * 100}%`, top: `${(plant.row + .5) / ROWS * 100}%` }}>
+                  <img src={definition.image} alt={definition.name} draggable={false} />
+                  {plant.health < definition.health && <span className="health"><i style={{ width: `${plant.health / definition.health * 100}%` }} /></span>}
+                </div>;
+              })}
               {zombies.map((zombie) => <div className={`zombie entity ${zombie.biting ? 'biting' : ''} ${zombie.hitUntil > elapsed ? 'hit' : ''}`} key={zombie.uid} style={{ left: `${(zombie.x + .5) / COLS * 100}%`, top: `${(zombie.row + 1) / ROWS * 100}%` }}>
                 <img src={ZOMBIES[zombie.type].image} alt={ZOMBIES[zombie.type].name} draggable={false} />
                 <span className="health enemy-health"><i style={{ width: `${Math.max(0, zombie.health / shambler.health * 100)}%` }} /></span>
               </div>)}
-              {projectiles.map((shot) => <span className="pea" key={shot.uid} style={{ left: `${(shot.x + .5) / COLS * 100}%`, top: `${(shot.row + .5) / ROWS * 100}%` }} />)}
+              {projectiles.map((shot) => <span className={`projectile ${shot.kind}`} key={shot.uid} style={{ left: `${(shot.x + .5) / COLS * 100}%`, top: `${(shot.row + .5) / ROWS * 100}%` }} />)}
               {suns.map((sun) => <button className="falling-sun" key={sun.uid} style={{ left: `${sun.x}%`, top: `${sun.y}%` }} onClick={() => collectSun(sun)} aria-label={`Collect ${sun.value} sun`}>☀<small>+{sun.value}</small></button>)}
               </div>
               {status !== 'playing' && <div className="game-overlay">
@@ -235,7 +246,7 @@ export default function Game() {
             </div>
           </div>
           <div className="stage-footer" role="status" aria-live="polite">
-            <span><kbd>1</kbd> Pick plant</span><span><kbd>Click</kbd> Place</span><span><kbd>Space</kbd> Pause</span>
+            <span><kbd>1–2</kbd> Pick plant</span><span><kbd>Click</kbd> Place</span><span><kbd>Space</kbd> Pause</span>
             <p>{notice}</p>
             <strong>{spawned < TARGET_KILLS ? `Next shambler · ${nextWave}s` : 'Final group deployed'}</strong>
           </div>

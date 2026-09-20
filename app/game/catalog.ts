@@ -11,7 +11,23 @@ export const PLANTS: Record<PlantId, PlantDefinition> = {
     health: 100,
     fireRateMs: 1250,
     projectileDamage: 25,
+    projectileKind: 'pea',
+    projectilesPerVolley: 1,
+    projectileSpeed: 1.85,
     image: '/assets/sprout-scout.png',
+  },
+  'stone-shooter': {
+    id: 'stone-shooter',
+    name: 'Stone Shooter',
+    description: 'Launches two heavy rocks with every volley.',
+    cost: 125,
+    health: 150,
+    fireRateMs: 1650,
+    projectileDamage: 22,
+    projectileKind: 'rock',
+    projectilesPerVolley: 2,
+    projectileSpeed: 1.55,
+    image: '/assets/stone-shooter.png',
   },
 };
 
