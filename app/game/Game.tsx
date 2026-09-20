@@ -45,6 +45,7 @@ export default function Game() {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === '1') setSelectedPlant('sprout-scout');
       if (event.key === '2') setSelectedPlant('stone-shooter');
+      if (event.key === '3') setSelectedPlant('stone-plant');
       if (event.key === 'Escape') setSelectedPlant(null);
       if (event.key === ' ') { event.preventDefault(); togglePause(); }
       if (event.key.toLowerCase() === 'r' && (status === 'won' || status === 'lost')) restart();
@@ -80,14 +81,44 @@ export default function Game() {
       lastSunAt.current = elapsed;
     }
 
+    const claimedZombies = new Set<number>();
+    const devours = new Map<number, number>();
+    plants.forEach((plant) => {
+      const definition = PLANTS[plant.type];
+      if (definition.attackMode !== 'devour' || plant.digestUntil > elapsed) return;
+      const target = zombies
+        .filter((zombie) => !claimedZombies.has(zombie.uid)
+          && zombie.row === plant.row
+          && zombie.x >= plant.col + 0.15
+          && Math.abs(zombie.x - (plant.col + 0.5)) <= definition.devourRange)
+        .sort((a, b) => Math.abs(a.x - (plant.col + 0.5)) - Math.abs(b.x - (plant.col + 0.5)))[0];
+      if (target) {
+        claimedZombies.add(target.uid);
+        devours.set(plant.uid, target.uid);
+      }
+    });
+    if (claimedZombies.size) {
+      setKills((value) => value + claimedZombies.size);
+      setEnergy((value) => value + claimedZombies.size * shambler.reward);
+      setNotice('Stone Plant swallowed a shambler. Digesting for 5 seconds…');
+    }
+
     setPlants((currentPlants) => {
       const damaged = currentPlants.map((plant) => {
         const attacker = zombies.find((zombie) => zombie.row === plant.row && Math.abs(zombie.x - (plant.col + 0.5)) < 0.52);
-        return attacker ? { ...plant, health: plant.health - shambler.damagePerSecond * TICK_MS / 1000 } : plant;
+        const nextPlant = attacker ? { ...plant, health: plant.health - shambler.damagePerSecond * TICK_MS / 1000 } : plant;
+        if (devours.has(plant.uid)) {
+          const definition = PLANTS[plant.type];
+          if (definition.attackMode === 'devour') {
+            return { ...nextPlant, pulseUntil: elapsed + 430, digestUntil: elapsed + definition.digestMs };
+          }
+        }
+        return nextPlant;
       }).filter((plant) => plant.health > 0);
 
       damaged.forEach((plant) => {
         const definition = PLANTS[plant.type];
+        if (definition.attackMode !== 'projectile') return;
         const hasTarget = zombies.some((zombie) => zombie.row === plant.row && zombie.x > plant.col + 0.15);
         if (hasTarget && elapsed - plant.lastShotAt >= definition.fireRateMs) {
           plant.lastShotAt = elapsed;
@@ -107,7 +138,7 @@ export default function Game() {
     });
 
     setZombies((currentZombies) => {
-      let next = currentZombies.map((zombie) => {
+      let next = currentZombies.filter((zombie) => !claimedZombies.has(zombie.uid)).map((zombie) => {
         const blockingPlant = plants.find((plant) => plant.row === zombie.row && Math.abs(zombie.x - (plant.col + 0.5)) < 0.52);
         return { ...zombie, biting: Boolean(blockingPlant), x: blockingPlant ? zombie.x : zombie.x - shambler.speed * TICK_MS / 1000 };
       });
@@ -133,7 +164,7 @@ export default function Game() {
       const hits = new Map<number, number>();
       moved.forEach((shot) => {
         const target = zombies
-          .filter((zombie) => zombie.row === shot.row && zombie.x >= shot.x - 0.25 && zombie.x <= shot.x + 0.38)
+          .filter((zombie) => !claimedZombies.has(zombie.uid) && zombie.row === shot.row && zombie.x >= shot.x - 0.25 && zombie.x <= shot.x + 0.38)
           .sort((a, b) => a.x - b.x)[0];
         if (target) { consumed.add(shot.uid); hits.set(target.uid, (hits.get(target.uid) || 0) + shot.damage); }
       });
@@ -169,7 +200,7 @@ export default function Game() {
     if (energy < definition.cost) { setNotice(`You need ${definition.cost - energy} more sun.`); return; }
     setEnergy((value) => value - definition.cost);
     setPlants((current) => [...current, {
-      uid: serial.current++, type: definition.id, row, col, health: definition.health, lastShotAt: elapsed - 600, pulseUntil: 0,
+      uid: serial.current++, type: definition.id, row, col, health: definition.health, lastShotAt: elapsed - 600, pulseUntil: 0, digestUntil: 0,
     }]);
     setNotice(`${definition.name} planted in lane ${row + 1}.`);
   };
@@ -207,7 +238,12 @@ export default function Game() {
             <span><b>{PLANTS['stone-shooter'].name}</b><small>Double rock volley</small></span>
             <em>{PLANTS['stone-shooter'].cost}</em>
           </button>
-          <div className="field-notes"><b>FIELD NOTES</b><p>Scouts fire fast. Stone Shooters have 150 health and launch two rocks per volley.</p></div>
+          <button className={`seed-card ${selectedPlant === 'stone-plant' ? 'selected' : ''} ${energy < PLANTS['stone-plant'].cost ? 'unaffordable' : ''}`} onClick={() => setSelectedPlant((value) => value === 'stone-plant' ? null : 'stone-plant')} aria-pressed={selectedPlant === 'stone-plant'}>
+            <img src={PLANTS['stone-plant'].image} alt="" />
+            <span><b>{PLANTS['stone-plant'].name}</b><small>Swallow · 5s digest</small></span>
+            <em>{PLANTS['stone-plant'].cost}</em>
+          </button>
+          <div className="field-notes"><b>FIELD NOTES</b><p>Stone Plants swallow the nearest shambler in front, then digest for 5 seconds.</p></div>
         </aside>
 
         <div className="stage-frame">
@@ -225,9 +261,13 @@ export default function Game() {
               {mowers.map((ready, row) => ready && <div className="mower" key={row} style={{ top: `${(row + .5) / ROWS * 100}%` }}>⇥</div>)}
               {plants.map((plant) => {
                 const definition = PLANTS[plant.type];
-                return <div className={`plant entity ${plant.pulseUntil > elapsed ? 'firing' : ''}`} key={plant.uid} style={{ left: `${(plant.col + .5) / COLS * 100}%`, top: `${(plant.row + .5) / ROWS * 100}%` }}>
-                  <img src={definition.image} alt={definition.name} draggable={false} />
+                const devouring = definition.attackMode === 'devour' && plant.pulseUntil > elapsed;
+                const digesting = definition.attackMode === 'devour' && plant.digestUntil > elapsed;
+                const image = definition.attackMode === 'devour' && digesting && !devouring ? definition.digestImage : definition.image;
+                return <div className={`plant entity ${definition.attackMode === 'projectile' && plant.pulseUntil > elapsed ? 'firing' : ''} ${devouring ? 'devouring' : ''} ${digesting && !devouring ? 'digesting' : ''}`} key={plant.uid} style={{ left: `${(plant.col + .5) / COLS * 100}%`, top: `${(plant.row + .5) / ROWS * 100}%` }}>
+                  <img src={image} alt={definition.name} draggable={false} />
                   {plant.health < definition.health && <span className="health"><i style={{ width: `${plant.health / definition.health * 100}%` }} /></span>}
+                  {digesting && !devouring && <span className="digest-timer">{Math.max(1, Math.ceil((plant.digestUntil - elapsed) / 1000))}s</span>}
                 </div>;
               })}
               {zombies.map((zombie) => <div className={`zombie entity ${zombie.biting ? 'biting' : ''} ${zombie.hitUntil > elapsed ? 'hit' : ''}`} key={zombie.uid} style={{ left: `${(zombie.x + .5) / COLS * 100}%`, top: `${(zombie.row + 1) / ROWS * 100}%` }}>
@@ -246,7 +286,7 @@ export default function Game() {
             </div>
           </div>
           <div className="stage-footer" role="status" aria-live="polite">
-            <span><kbd>1–2</kbd> Pick plant</span><span><kbd>Click</kbd> Place</span><span><kbd>Space</kbd> Pause</span>
+            <span><kbd>1–3</kbd> Pick plant</span><span><kbd>Click</kbd> Place</span><span><kbd>Space</kbd> Pause</span>
             <p>{notice}</p>
             <strong>{spawned < TARGET_KILLS ? `Next shambler · ${nextWave}s` : 'Final group deployed'}</strong>
           </div>
