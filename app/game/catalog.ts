@@ -69,4 +69,14 @@ export const ZOMBIES: Record<ZombieId, ZombieDefinition> = {
     reward: 20,
     image: '/assets/pothead-shambler.png',
   },
+  'log-zombie': {
+    id: 'log-zombie',
+    name: 'Log Zombie',
+    health: 250,
+    speed: 0.084,
+    damagePerSecond: 17,
+    reward: 20,
+    image: '/assets/log-zombie.png',
+    attackImage: '/assets/log-zombie-attack.png',
+  },
 };

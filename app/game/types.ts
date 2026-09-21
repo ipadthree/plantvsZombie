@@ -1,5 +1,5 @@
 export type PlantId = 'sprout-scout' | 'stone-shooter' | 'stone-plant' | 'watermelon-plant';
-export type ZombieId = 'pothead-shambler';
+export type ZombieId = 'pothead-shambler' | 'log-zombie';
 export type ProjectileKind = 'pea' | 'rock' | 'watermelon';
 
 type PlantDefinitionBase = {
@@ -37,6 +37,7 @@ export type ZombieDefinition = {
   damagePerSecond: number;
   reward: number;
   image: string;
+  attackImage?: string;
 };
 
 export type PlantEntity = {
@@ -56,6 +57,7 @@ export type ZombieEntity = {
   row: number;
   x: number;
   health: number;
+  maxHealth: number;
   biting: boolean;
   hitUntil: number;
 };

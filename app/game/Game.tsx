@@ -6,11 +6,11 @@ import type { PlantEntity, PlantId, ProjectileEntity, SunEntity, ZombieEntity } 
 
 const ROWS = 5;
 const COLS = 9;
-const ZOMBIES_PER_WAVE = 12;
+const REGULAR_ZOMBIES_PER_WAVE = 12;
+const LOG_ZOMBIES_BY_WAVE = [0, 5, 7] as const;
 const TOTAL_WAVES = 3;
-const TOTAL_ZOMBIES = ZOMBIES_PER_WAVE * TOTAL_WAVES;
+const TOTAL_ZOMBIES = REGULAR_ZOMBIES_PER_WAVE * TOTAL_WAVES + LOG_ZOMBIES_BY_WAVE.reduce((total, count) => total + count, 0);
 const TICK_MS = 50;
-const shambler = ZOMBIES['pothead-shambler'];
 
 type GameStatus = 'playing' | 'paused' | 'won' | 'lost';
 
@@ -33,6 +33,11 @@ export default function Game() {
   const serial = useRef(1);
   const lastSpawnAt = useRef(0);
   const lastSunAt = useRef(0);
+  const logZombiesThisWave = LOG_ZOMBIES_BY_WAVE[currentWave - 1] ?? 0;
+  const zombiesThisWave = REGULAR_ZOMBIES_PER_WAVE + logZombiesThisWave;
+  const killsBeforeThisWave = Array.from({ length: currentWave - 1 }, (_, index) => REGULAR_ZOMBIES_PER_WAVE + LOG_ZOMBIES_BY_WAVE[index])
+    .reduce((total, count) => total + count, 0);
+  const waveKills = Math.max(0, kills - killsBeforeThisWave);
 
   const restart = useCallback(() => {
     setEnergy(150); setPlants([]); setZombies([]); setProjectiles([]); setSuns([]);
@@ -102,15 +107,21 @@ export default function Game() {
   useEffect(() => {
     if (status !== 'playing') return;
 
-    if (spawned < ZOMBIES_PER_WAVE && elapsed - lastSpawnAt.current >= (spawned === 0 ? 1200 : Math.max(2600, 5100 - spawned * 150))) {
+    if (spawned < zombiesThisWave && elapsed - lastSpawnAt.current >= (spawned === 0 ? 1200 : Math.max(2600, 5100 - spawned * 150))) {
       const row = Math.floor(Math.random() * ROWS);
+      const logQuotaBefore = Math.floor(spawned * logZombiesThisWave / zombiesThisWave);
+      const logQuotaAfter = Math.floor((spawned + 1) * logZombiesThisWave / zombiesThisWave);
+      const zombieType = logQuotaAfter > logQuotaBefore ? 'log-zombie' : 'pothead-shambler';
+      const definition = ZOMBIES[zombieType];
+      const healthBonus = Math.floor(spawned / 4) * 15 * (zombieType === 'log-zombie' ? 2 : 1);
+      const maxHealth = definition.health + healthBonus;
       setZombies((current) => [...current, {
-        uid: serial.current++, type: shambler.id, row, x: 9.25,
-        health: shambler.health + Math.floor(spawned / 4) * 15, biting: false, hitUntil: 0,
+        uid: serial.current++, type: definition.id, row, x: 9.25,
+        health: maxHealth, maxHealth, biting: false, hitUntil: 0,
       }]);
       setSpawned((value) => value + 1);
       lastSpawnAt.current = elapsed;
-      setNotice(currentWave === TOTAL_WAVES && spawned > 7 ? 'Final wave incoming!' : `Wave ${currentWave}: a shambler entered the yard.`);
+      setNotice(zombieType === 'log-zombie' ? `Wave ${currentWave}: a Log Zombie entered the yard!` : currentWave === TOTAL_WAVES && spawned > 7 ? 'Final wave incoming!' : `Wave ${currentWave}: a shambler entered the yard.`);
     }
 
     if (elapsed - lastSunAt.current >= 5600) {
@@ -138,14 +149,17 @@ export default function Game() {
     });
     if (claimedZombies.size) {
       setKills((value) => value + claimedZombies.size);
-      setEnergy((value) => value + claimedZombies.size * shambler.reward);
+      const reward = zombies
+        .filter((zombie) => claimedZombies.has(zombie.uid))
+        .reduce((total, zombie) => total + ZOMBIES[zombie.type].reward, 0);
+      setEnergy((value) => value + reward);
       setNotice('Stone Plant swallowed a shambler. Digesting for 5 seconds…');
     }
 
     setPlants((currentPlants) => {
       const damaged = currentPlants.map((plant) => {
         const attacker = zombies.find((zombie) => zombie.row === plant.row && Math.abs(zombie.x - (plant.col + 0.5)) < 0.52);
-        const nextPlant = attacker ? { ...plant, health: plant.health - shambler.damagePerSecond * TICK_MS / 1000 } : plant;
+        const nextPlant = attacker ? { ...plant, health: plant.health - ZOMBIES[attacker.type].damagePerSecond * TICK_MS / 1000 } : plant;
         if (devours.has(plant.uid)) {
           const definition = PLANTS[plant.type];
           if (definition.attackMode === 'devour') {
@@ -158,7 +172,7 @@ export default function Game() {
       damaged.forEach((plant) => {
         const definition = PLANTS[plant.type];
         if (definition.attackMode !== 'projectile') return;
-        const hasTarget = zombies.some((zombie) => zombie.row === plant.row && zombie.x > plant.col + 0.15);
+        const hasTarget = zombies.some((zombie) => zombie.row === plant.row && zombie.x > plant.col + 0.15 && zombie.x <= COLS - 0.5);
         if (hasTarget && elapsed - plant.lastShotAt >= definition.fireRateMs) {
           plant.lastShotAt = elapsed;
           plant.pulseUntil = elapsed + 180;
@@ -179,7 +193,7 @@ export default function Game() {
     setZombies((currentZombies) => {
       let next = currentZombies.filter((zombie) => !claimedZombies.has(zombie.uid)).map((zombie) => {
         const blockingPlant = plants.find((plant) => plant.row === zombie.row && Math.abs(zombie.x - (plant.col + 0.5)) < 0.52);
-        return { ...zombie, biting: Boolean(blockingPlant), x: blockingPlant ? zombie.x : zombie.x - shambler.speed * TICK_MS / 1000 };
+        return { ...zombie, biting: Boolean(blockingPlant), x: blockingPlant ? zombie.x : zombie.x - ZOMBIES[zombie.type].speed * TICK_MS / 1000 };
       });
 
       const breachedRows = new Set(next.filter((zombie) => zombie.x < 0.08).map((zombie) => zombie.row));
@@ -210,12 +224,16 @@ export default function Game() {
       if (hits.size) {
         setZombies((current) => {
           let defeated = 0;
+          let reward = 0;
           const survivors = current.map((zombie) => ({
             ...zombie,
             health: zombie.health - (hits.get(zombie.uid) || 0),
             hitUntil: hits.has(zombie.uid) ? elapsed + 160 : zombie.hitUntil,
-          })).filter((zombie) => { if (zombie.health <= 0) defeated += 1; return zombie.health > 0; });
-          if (defeated) { setKills((value) => value + defeated); setEnergy((value) => value + defeated * shambler.reward); }
+          })).filter((zombie) => {
+            if (zombie.health <= 0) { defeated += 1; reward += ZOMBIES[zombie.type].reward; }
+            return zombie.health > 0;
+          });
+          if (defeated) { setKills((value) => value + defeated); setEnergy((value) => value + reward); }
           return survivors;
         });
       }
@@ -227,8 +245,7 @@ export default function Game() {
   }, [elapsed, status]);
 
   useEffect(() => {
-    const waveKills = kills - (currentWave - 1) * ZOMBIES_PER_WAVE;
-    if (status === 'playing' && spawned >= ZOMBIES_PER_WAVE && waveKills >= ZOMBIES_PER_WAVE && zombies.length === 0) {
+    if (status === 'playing' && spawned >= zombiesThisWave && waveKills >= zombiesThisWave && zombies.length === 0) {
       if (currentWave < TOTAL_WAVES) {
         setCurrentWave((wave) => wave + 1);
         setSpawned(0);
@@ -240,7 +257,7 @@ export default function Game() {
         setNotice('All three waves cleared. The backyard is safe—for now.');
       }
     }
-  }, [currentWave, elapsed, kills, spawned, status, zombies.length]);
+  }, [currentWave, elapsed, spawned, status, waveKills, zombies.length, zombiesThisWave]);
 
   const placePlant = (row: number, col: number) => {
     if (status !== 'playing' || !selectedPlant) return;
@@ -260,8 +277,7 @@ export default function Game() {
     setNotice(`+${sun.value} sun collected.`);
   };
 
-  const waveKills = Math.max(0, kills - (currentWave - 1) * ZOMBIES_PER_WAVE);
-  const progress = Math.min(100, ((waveKills + spawned * .25) / (ZOMBIES_PER_WAVE * 1.25)) * 100);
+  const progress = Math.min(100, ((waveKills + spawned * .25) / (zombiesThisWave * 1.25)) * 100);
   const nextSpawn = Math.max(0, Math.ceil(((lastSpawnAt.current + (spawned === 0 ? 1200 : Math.max(2600, 5100 - spawned * 150))) - elapsed) / 1000));
 
   return (
@@ -308,7 +324,7 @@ export default function Game() {
         <div className="stage-frame">
           <div className="stage-hud">
             <span className="eyebrow">DAY 01 · HOME TURF</span>
-            <div className="wave"><span>WAVE</span><b>{String(currentWave).padStart(2, '0')}/{String(TOTAL_WAVES).padStart(2, '0')}</b><i><u style={{ width: `${progress}%` }} /></i><strong>{waveKills}/{ZOMBIES_PER_WAVE}</strong></div>
+            <div className="wave"><span>WAVE</span><b>{String(currentWave).padStart(2, '0')}/{String(TOTAL_WAVES).padStart(2, '0')}</b><i><u style={{ width: `${progress}%` }} /></i><strong>{waveKills}/{zombiesThisWave}</strong></div>
           </div>
           <div className="yard-scene" aria-label="Cartoon view of the family front yard">
             <div className={`lawn ${selectedPlant ? 'placing' : ''}`} aria-label="Five by nine garden defense grid">
@@ -329,10 +345,14 @@ export default function Game() {
                   {digesting && !devouring && <span className="digest-timer">{Math.max(1, Math.ceil((plant.digestUntil - elapsed) / 1000))}s</span>}
                 </div>;
               })}
-              {zombies.map((zombie) => <div className={`zombie entity ${zombie.biting ? 'biting' : ''} ${zombie.hitUntil > elapsed ? 'hit' : ''}`} key={zombie.uid} style={{ left: `${(zombie.x + .5) / COLS * 100}%`, top: `${(zombie.row + 1) / ROWS * 100}%` }}>
-                <img src={ZOMBIES[zombie.type].image} alt={ZOMBIES[zombie.type].name} draggable={false} />
-                <span className="health enemy-health"><i style={{ width: `${Math.max(0, zombie.health / shambler.health * 100)}%` }} /></span>
-              </div>)}
+              {zombies.map((zombie) => {
+                const definition = ZOMBIES[zombie.type];
+                const attackFrame = zombie.biting && definition.attackImage && Math.floor(elapsed / 260) % 2 === 0;
+                return <div className={`zombie entity ${zombie.type} ${zombie.biting ? 'biting' : ''} ${zombie.hitUntil > elapsed ? 'hit' : ''}`} key={zombie.uid} style={{ left: `${(zombie.x + .5) / COLS * 100}%`, top: `${(zombie.row + 1) / ROWS * 100}%` }}>
+                  <img src={attackFrame ? definition.attackImage : definition.image} alt={definition.name} draggable={false} />
+                  <span className="health enemy-health"><i style={{ width: `${Math.max(0, zombie.health / zombie.maxHealth * 100)}%` }} /></span>
+                </div>;
+              })}
               {projectiles.map((shot) => <span className={`projectile ${shot.kind}`} key={shot.uid} style={{ left: `${(shot.x + .5) / COLS * 100}%`, top: `${(shot.row + .5) / ROWS * 100}%` }} />)}
               {suns.map((sun) => <button className="falling-sun" key={sun.uid} style={{ left: `${sun.x}%`, top: `${sun.y}%` }} onClick={() => collectSun(sun)} aria-label={`Collect ${sun.value} sun`}>☀<small>+{sun.value}</small></button>)}
               </div>
@@ -347,7 +367,7 @@ export default function Game() {
           <div className="stage-footer" role="status" aria-live="polite">
             <span><kbd>1–4</kbd> Pick plant</span><span><kbd>Click</kbd> Place</span><span><kbd>Space</kbd> Pause</span>
             <p>{notice}</p>
-            <strong>{spawned < ZOMBIES_PER_WAVE ? `Wave ${currentWave} · next shambler ${nextSpawn}s` : currentWave === TOTAL_WAVES ? 'Final wave deployed' : `Wave ${currentWave} fully deployed`}</strong>
+            <strong>{spawned < zombiesThisWave ? `Wave ${currentWave} · next zombie ${nextSpawn}s` : currentWave === TOTAL_WAVES ? 'Final wave deployed' : `Wave ${currentWave} fully deployed`}</strong>
           </div>
         </div>
       </section>
