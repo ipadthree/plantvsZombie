@@ -6,7 +6,9 @@ import type { PlantEntity, PlantId, ProjectileEntity, SunEntity, ZombieEntity } 
 
 const ROWS = 5;
 const COLS = 9;
-const TARGET_KILLS = 12;
+const ZOMBIES_PER_WAVE = 12;
+const TOTAL_WAVES = 3;
+const TOTAL_ZOMBIES = ZOMBIES_PER_WAVE * TOTAL_WAVES;
 const TICK_MS = 50;
 const shambler = ZOMBIES['pothead-shambler'];
 
@@ -21,6 +23,7 @@ export default function Game() {
   const [suns, setSuns] = useState<SunEntity[]>([]);
   const [selectedPlant, setSelectedPlant] = useState<PlantId | null>('sprout-scout');
   const [status, setStatus] = useState<GameStatus>('playing');
+  const [currentWave, setCurrentWave] = useState(1);
   const [kills, setKills] = useState(0);
   const [spawned, setSpawned] = useState(0);
   const [elapsed, setElapsed] = useState(0);
@@ -33,7 +36,7 @@ export default function Game() {
 
   const restart = useCallback(() => {
     setEnergy(150); setPlants([]); setZombies([]); setProjectiles([]); setSuns([]);
-    setStatus('playing'); setKills(0); setSpawned(0); setElapsed(0);
+    setStatus('playing'); setCurrentWave(1); setKills(0); setSpawned(0); setElapsed(0);
     setMowers(Array(ROWS).fill(true)); setSelectedPlant('sprout-scout');
     setNotice('Pick a plant, then choose a tile.');
     lastSpawnAt.current = 0; lastSunAt.current = 0;
@@ -99,7 +102,7 @@ export default function Game() {
   useEffect(() => {
     if (status !== 'playing') return;
 
-    if (spawned < TARGET_KILLS && elapsed - lastSpawnAt.current >= (spawned === 0 ? 1200 : Math.max(2600, 5100 - spawned * 150))) {
+    if (spawned < ZOMBIES_PER_WAVE && elapsed - lastSpawnAt.current >= (spawned === 0 ? 1200 : Math.max(2600, 5100 - spawned * 150))) {
       const row = Math.floor(Math.random() * ROWS);
       setZombies((current) => [...current, {
         uid: serial.current++, type: shambler.id, row, x: 9.25,
@@ -107,7 +110,7 @@ export default function Game() {
       }]);
       setSpawned((value) => value + 1);
       lastSpawnAt.current = elapsed;
-      setNotice(spawned > 7 ? 'Final wave incoming!' : 'A shambler entered the yard.');
+      setNotice(currentWave === TOTAL_WAVES && spawned > 7 ? 'Final wave incoming!' : `Wave ${currentWave}: a shambler entered the yard.`);
     }
 
     if (elapsed - lastSunAt.current >= 5600) {
@@ -224,10 +227,20 @@ export default function Game() {
   }, [elapsed, status]);
 
   useEffect(() => {
-    if (status === 'playing' && spawned >= TARGET_KILLS && kills >= TARGET_KILLS && zombies.length === 0) {
-      setStatus('won'); setNotice('The backyard is safe—for now.');
+    const waveKills = kills - (currentWave - 1) * ZOMBIES_PER_WAVE;
+    if (status === 'playing' && spawned >= ZOMBIES_PER_WAVE && waveKills >= ZOMBIES_PER_WAVE && zombies.length === 0) {
+      if (currentWave < TOTAL_WAVES) {
+        setCurrentWave((wave) => wave + 1);
+        setSpawned(0);
+        setProjectiles([]);
+        lastSpawnAt.current = elapsed + 2800;
+        setNotice(`Wave ${currentWave + 1} begins in 4 seconds. Get ready!`);
+      } else {
+        setStatus('won');
+        setNotice('All three waves cleared. The backyard is safe—for now.');
+      }
     }
-  }, [kills, spawned, status, zombies.length]);
+  }, [currentWave, elapsed, kills, spawned, status, zombies.length]);
 
   const placePlant = (row: number, col: number) => {
     if (status !== 'playing' || !selectedPlant) return;
@@ -247,8 +260,9 @@ export default function Game() {
     setNotice(`+${sun.value} sun collected.`);
   };
 
-  const progress = Math.min(100, ((kills + spawned * .25) / (TARGET_KILLS * 1.25)) * 100);
-  const nextWave = Math.max(0, Math.ceil(((lastSpawnAt.current + Math.max(2600, 5100 - spawned * 150)) - elapsed) / 1000));
+  const waveKills = Math.max(0, kills - (currentWave - 1) * ZOMBIES_PER_WAVE);
+  const progress = Math.min(100, ((waveKills + spawned * .25) / (ZOMBIES_PER_WAVE * 1.25)) * 100);
+  const nextSpawn = Math.max(0, Math.ceil(((lastSpawnAt.current + (spawned === 0 ? 1200 : Math.max(2600, 5100 - spawned * 150))) - elapsed) / 1000));
 
   return (
     <main className="game-shell">
@@ -258,7 +272,7 @@ export default function Game() {
           <span className="brand-mark">BB</span>
           <span><strong>BACKYARD</strong><b>BRIGADE</b></span>
         </a>
-        <div className="round-pill"><span /> Round 1 · A quiet afternoon</div>
+        <div className="round-pill"><span /> Wave {currentWave} of {TOTAL_WAVES} · Home turf</div>
         <div className="topbar-actions">
           <button className={`icon-button music-button ${musicEnabled ? '' : 'off'}`} aria-label={musicEnabled ? 'Mute background music' : 'Play background music'} title={musicEnabled ? 'Mute music' : 'Play music'} onClick={toggleMusic}>{musicEnabled ? '♫' : '♪'}</button>
           <button className="icon-button" aria-label={status === 'paused' ? 'Resume game' : 'Pause game'} onClick={togglePause}>{status === 'paused' ? '▶' : 'Ⅱ'}</button>
@@ -294,7 +308,7 @@ export default function Game() {
         <div className="stage-frame">
           <div className="stage-hud">
             <span className="eyebrow">DAY 01 · HOME TURF</span>
-            <div className="wave"><span>SHUFFLE</span><b>{String(Math.min(spawned + 1, TARGET_KILLS)).padStart(2, '0')}</b><i><u style={{ width: `${progress}%` }} /></i><strong>{kills}/{TARGET_KILLS}</strong></div>
+            <div className="wave"><span>WAVE</span><b>{String(currentWave).padStart(2, '0')}/{String(TOTAL_WAVES).padStart(2, '0')}</b><i><u style={{ width: `${progress}%` }} /></i><strong>{waveKills}/{ZOMBIES_PER_WAVE}</strong></div>
           </div>
           <div className="yard-scene" aria-label="Cartoon view of the family front yard">
             <div className={`lawn ${selectedPlant ? 'placing' : ''}`} aria-label="Five by nine garden defense grid">
@@ -325,7 +339,7 @@ export default function Game() {
               {status !== 'playing' && <div className="game-overlay">
                 <span>{status === 'paused' ? 'FIELD BREAK' : status === 'won' ? 'YARD SECURED' : 'PORCH OVERRUN'}</span>
                 <h1>{status === 'paused' ? 'Game paused' : status === 'won' ? 'Nice gardening.' : 'The shufflers got through.'}</h1>
-                <p>{status === 'paused' ? 'Take a breath. The backyard will wait.' : `${kills} of ${TARGET_KILLS} shufflers cleared.`}</p>
+                <p>{status === 'paused' ? `Wave ${currentWave} of ${TOTAL_WAVES}. Take a breath.` : `${kills} of ${TOTAL_ZOMBIES} shufflers cleared.`}</p>
                 <button onClick={status === 'paused' ? togglePause : restart}>{status === 'paused' ? 'Keep defending' : 'Try again'}</button>
               </div>}
             </div>
@@ -333,7 +347,7 @@ export default function Game() {
           <div className="stage-footer" role="status" aria-live="polite">
             <span><kbd>1–4</kbd> Pick plant</span><span><kbd>Click</kbd> Place</span><span><kbd>Space</kbd> Pause</span>
             <p>{notice}</p>
-            <strong>{spawned < TARGET_KILLS ? `Next shambler · ${nextWave}s` : 'Final group deployed'}</strong>
+            <strong>{spawned < ZOMBIES_PER_WAVE ? `Wave ${currentWave} · next shambler ${nextSpawn}s` : currentWave === TOTAL_WAVES ? 'Final wave deployed' : `Wave ${currentWave} fully deployed`}</strong>
           </div>
         </div>
       </section>
