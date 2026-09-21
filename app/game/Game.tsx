@@ -13,6 +13,7 @@ const shambler = ZOMBIES['pothead-shambler'];
 type GameStatus = 'playing' | 'paused' | 'won' | 'lost';
 
 export default function Game() {
+  const audioRef = useRef<HTMLAudioElement>(null);
   const [energy, setEnergy] = useState(150);
   const [plants, setPlants] = useState<PlantEntity[]>([]);
   const [zombies, setZombies] = useState<ZombieEntity[]>([]);
@@ -25,6 +26,7 @@ export default function Game() {
   const [elapsed, setElapsed] = useState(0);
   const [mowers, setMowers] = useState<boolean[]>(Array(ROWS).fill(true));
   const [notice, setNotice] = useState('Pick a plant, then choose a tile.');
+  const [musicEnabled, setMusicEnabled] = useState(true);
   const serial = useRef(1);
   const lastSpawnAt = useRef(0);
   const lastSunAt = useRef(0);
@@ -40,6 +42,39 @@ export default function Game() {
   const togglePause = useCallback(() => {
     setStatus((current) => current === 'playing' ? 'paused' : current === 'paused' ? 'playing' : current);
   }, []);
+
+  const playMusic = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio || !musicEnabled) return;
+    audio.volume = 0.32;
+    void audio.play().catch(() => {
+      // Browsers may require a user gesture; the listeners below retry then.
+    });
+  }, [musicEnabled]);
+
+  const toggleMusic = useCallback(() => {
+    const audio = audioRef.current;
+    setMusicEnabled((current) => {
+      if (current) {
+        audio?.pause();
+      } else if (audio) {
+        audio.volume = 0.32;
+        void audio.play().catch(() => {});
+      }
+      return !current;
+    });
+  }, []);
+
+  useEffect(() => {
+    playMusic();
+    const unlockMusic = () => playMusic();
+    window.addEventListener('pointerdown', unlockMusic, { once: true });
+    window.addEventListener('keydown', unlockMusic, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlockMusic);
+      window.removeEventListener('keydown', unlockMusic);
+    };
+  }, [playMusic]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -217,13 +252,17 @@ export default function Game() {
 
   return (
     <main className="game-shell">
+      <audio ref={audioRef} src="/assets/guardia-de-la-torre.mp3" loop preload="auto" />
       <header className="topbar">
         <a className="brand" href="#" aria-label="Backyard Brigade home">
           <span className="brand-mark">BB</span>
           <span><strong>BACKYARD</strong><b>BRIGADE</b></span>
         </a>
         <div className="round-pill"><span /> Round 1 · A quiet afternoon</div>
-        <button className="icon-button" aria-label={status === 'paused' ? 'Resume game' : 'Pause game'} onClick={togglePause}>{status === 'paused' ? '▶' : 'Ⅱ'}</button>
+        <div className="topbar-actions">
+          <button className={`icon-button music-button ${musicEnabled ? '' : 'off'}`} aria-label={musicEnabled ? 'Mute background music' : 'Play background music'} title={musicEnabled ? 'Mute music' : 'Play music'} onClick={toggleMusic}>{musicEnabled ? '♫' : '♪'}</button>
+          <button className="icon-button" aria-label={status === 'paused' ? 'Resume game' : 'Pause game'} onClick={togglePause}>{status === 'paused' ? '▶' : 'Ⅱ'}</button>
+        </div>
       </header>
 
       <section className="game-wrap">
