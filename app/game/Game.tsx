@@ -46,6 +46,7 @@ export default function Game() {
       if (event.key === '1') setSelectedPlant('sprout-scout');
       if (event.key === '2') setSelectedPlant('stone-shooter');
       if (event.key === '3') setSelectedPlant('stone-plant');
+      if (event.key === '4') setSelectedPlant('watermelon-plant');
       if (event.key === 'Escape') setSelectedPlant(null);
       if (event.key === ' ') { event.preventDefault(); togglePause(); }
       if (event.key.toLowerCase() === 'r' && (status === 'won' || status === 'lost')) restart();
@@ -243,7 +244,12 @@ export default function Game() {
             <span><b>{PLANTS['stone-plant'].name}</b><small>Swallow · 5s digest</small></span>
             <em>{PLANTS['stone-plant'].cost}</em>
           </button>
-          <div className="field-notes"><b>FIELD NOTES</b><p>Stone Plants swallow the nearest shambler in front, then digest for 5 seconds.</p></div>
+          <button className={`seed-card ${selectedPlant === 'watermelon-plant' ? 'selected' : ''} ${energy < PLANTS['watermelon-plant'].cost ? 'unaffordable' : ''}`} onClick={() => setSelectedPlant((value) => value === 'watermelon-plant' ? null : 'watermelon-plant')} aria-pressed={selectedPlant === 'watermelon-plant'}>
+            <img src={PLANTS['watermelon-plant'].image} alt="" />
+            <span><b>{PLANTS['watermelon-plant'].name}</b><small>2 slices · 1.5× damage</small></span>
+            <em>{PLANTS['watermelon-plant'].cost}</em>
+          </button>
+          <div className="field-notes"><b>FIELD NOTES</b><p>Watermelon Plants have 250 health and fire two high-damage slices per volley.</p></div>
         </aside>
 
         <div className="stage-frame">
@@ -286,7 +292,7 @@ export default function Game() {
             </div>
           </div>
           <div className="stage-footer" role="status" aria-live="polite">
-            <span><kbd>1–3</kbd> Pick plant</span><span><kbd>Click</kbd> Place</span><span><kbd>Space</kbd> Pause</span>
+            <span><kbd>1–4</kbd> Pick plant</span><span><kbd>Click</kbd> Place</span><span><kbd>Space</kbd> Pause</span>
             <p>{notice}</p>
             <strong>{spawned < TARGET_KILLS ? `Next shambler · ${nextWave}s` : 'Final group deployed'}</strong>
           </div>

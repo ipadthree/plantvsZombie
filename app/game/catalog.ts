@@ -43,6 +43,20 @@ export const PLANTS: Record<PlantId, PlantDefinition> = {
     image: '/assets/stone-plant.png',
     digestImage: '/assets/stone-plant-digesting.png',
   },
+  'watermelon-plant': {
+    id: 'watermelon-plant',
+    name: 'Watermelon Plant',
+    description: 'Fires two watermelon slices, each dealing 1.5× pea damage.',
+    cost: 200,
+    health: 250,
+    attackMode: 'projectile',
+    fireRateMs: 1750,
+    projectileDamage: 37.5,
+    projectileKind: 'watermelon',
+    projectilesPerVolley: 2,
+    projectileSpeed: 1.45,
+    image: '/assets/watermelon-plant.png',
+  },
 };
 
 export const ZOMBIES: Record<ZombieId, ZombieDefinition> = {

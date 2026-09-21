@@ -1,6 +1,6 @@
-export type PlantId = 'sprout-scout' | 'stone-shooter' | 'stone-plant';
+export type PlantId = 'sprout-scout' | 'stone-shooter' | 'stone-plant' | 'watermelon-plant';
 export type ZombieId = 'pothead-shambler';
-export type ProjectileKind = 'pea' | 'rock';
+export type ProjectileKind = 'pea' | 'rock' | 'watermelon';
 
 type PlantDefinitionBase = {
   id: PlantId;
