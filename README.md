@@ -18,6 +18,18 @@ The game runs entirely in the browser. Music may begin after the first click or 
 - Each lane has a one-use lawn mower as its last line of defense.
 - Clear all three waves to secure the yard.
 
+### Difficulty modes
+
+Use the mode bar at the top of the game to choose a difficulty. Each option has a plant expression icon: relaxed for Easy, tense for Hard, and sweating for Crazy. Switching modes starts a fresh game; restarting after a win or loss keeps the selected mode.
+
+| Mode | Wave 1 (regular / log) | Wave 2 (regular / log) | Wave 3 (regular / log) | Total |
+| --- | --- | --- | --- | ---: |
+| Easy · 1× | 12 / 0 | 12 / 5 | 12 / 7 | 48 |
+| Hard · 2× | 24 / 0 | 24 / 10 | 24 / 14 | 96 |
+| Crazy · 4× | 48 / 0 | 48 / 20 | 48 / 28 | 192 |
+
+Difficulty changes zombie quantity. Hard and Crazy expand each Easy encounter into groups of two or four across different lanes, preserving the existing encounter timing and health progression. Plant stats, zombie stats, and sun rules stay the same.
+
 ### Plants
 
 | Plant | Cost | Health | Role |
@@ -34,7 +46,7 @@ The game runs entirely in the browser. Music may begin after the first click or 
 | Pothead Shambler | 125 | 100% | Walks down a lane and bites plants on contact. |
 | Log Zombie | 250 | 80% | Appears from wave 2 and swings its log at plants. |
 
-Each wave contains 12 Pothead Shamblers. Wave 2 adds 5 Log Zombies, and wave 3 adds 7, for 48 enemies across the full game. Later spawns receive a small health increase.
+In Easy mode, each wave contains 12 Pothead Shamblers. Wave 2 adds 5 Log Zombies, and wave 3 adds 7, for 48 enemies across the full game. Later encounters receive a small health increase; the same curve applies in every mode.
 
 ## Controls
 
@@ -48,6 +60,7 @@ Each wave contains 12 Pothead Shamblers. Wave 2 adds 5 Log Zombies, and wave 3 a
 | `Space` | Pause or resume |
 | `R` | Restart after winning or losing |
 | Music button | Mute or resume the background music |
+| Easy / Hard / Crazy | Start a fresh game in that difficulty |
 
 ## Tech architecture
 
@@ -58,6 +71,7 @@ app/
 ├── game/
 │   ├── Game.tsx       # Game clock, simulation, input, waves, combat, and rendering
 │   ├── catalog.ts     # Data-driven plant and zombie definitions
+│   ├── difficulty.ts  # Difficulty multipliers, wave quotas, and spawn groups
 │   └── types.ts       # Definition and entity contracts
 ├── globals.css        # Board layout, responsive UI, and character animations
 ├── layout.tsx         # Page metadata and document shell
@@ -98,8 +112,12 @@ npm run start
 Run the project checks with:
 
 ```bash
+npm test
+npx tsc --noEmit
 npm run lint
 ```
+
+The tests verify exact wave quotas, spawn timing and health parity, and cumulative victory totals for all three difficulties.
 
 ## Add custom characters
 

@@ -2,20 +2,19 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PLANTS, ZOMBIES } from './catalog';
+import { DIFFICULTIES, DIFFICULTY_OPTIONS, TOTAL_WAVES, getKillsBeforeWave, getSpawnDelayMs, getSpawnGroup, getTotalZombies, getWaveCounts } from './difficulty';
+import type { Difficulty } from './difficulty';
 import type { PlantEntity, PlantId, ProjectileEntity, SunEntity, ZombieEntity } from './types';
 
 const ROWS = 5;
 const COLS = 9;
-const REGULAR_ZOMBIES_PER_WAVE = 12;
-const LOG_ZOMBIES_BY_WAVE = [0, 5, 7] as const;
-const TOTAL_WAVES = 3;
-const TOTAL_ZOMBIES = REGULAR_ZOMBIES_PER_WAVE * TOTAL_WAVES + LOG_ZOMBIES_BY_WAVE.reduce((total, count) => total + count, 0);
 const TICK_MS = 50;
 
 type GameStatus = 'playing' | 'paused' | 'won' | 'lost';
 
 export default function Game() {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const [difficulty, setDifficulty] = useState<Difficulty>('easy');
   const [energy, setEnergy] = useState(150);
   const [plants, setPlants] = useState<PlantEntity[]>([]);
   const [zombies, setZombies] = useState<ZombieEntity[]>([]);
@@ -33,10 +32,9 @@ export default function Game() {
   const serial = useRef(1);
   const lastSpawnAt = useRef(0);
   const lastSunAt = useRef(0);
-  const logZombiesThisWave = LOG_ZOMBIES_BY_WAVE[currentWave - 1] ?? 0;
-  const zombiesThisWave = REGULAR_ZOMBIES_PER_WAVE + logZombiesThisWave;
-  const killsBeforeThisWave = Array.from({ length: currentWave - 1 }, (_, index) => REGULAR_ZOMBIES_PER_WAVE + LOG_ZOMBIES_BY_WAVE[index])
-    .reduce((total, count) => total + count, 0);
+  const zombiesThisWave = getWaveCounts(difficulty, currentWave).total;
+  const totalZombies = getTotalZombies(difficulty);
+  const killsBeforeThisWave = getKillsBeforeWave(difficulty, currentWave);
   const waveKills = Math.max(0, kills - killsBeforeThisWave);
 
   const restart = useCallback(() => {
@@ -46,6 +44,13 @@ export default function Game() {
     setNotice('Pick a plant, then choose a tile.');
     lastSpawnAt.current = 0; lastSunAt.current = 0;
   }, []);
+
+  const changeDifficulty = (nextDifficulty: Difficulty) => {
+    if (nextDifficulty === difficulty) return;
+    setDifficulty(nextDifficulty);
+    restart();
+    setNotice(`${DIFFICULTIES[nextDifficulty].label} mode started. Pick a plant, then choose a tile.`);
+  };
 
   const togglePause = useCallback(() => {
     setStatus((current) => current === 'playing' ? 'paused' : current === 'paused' ? 'playing' : current);
@@ -91,7 +96,8 @@ export default function Game() {
       if (event.key === '3') setSelectedPlant('stone-plant');
       if (event.key === '4') setSelectedPlant('watermelon-plant');
       if (event.key === 'Escape') setSelectedPlant(null);
-      if (event.key === ' ') { event.preventDefault(); togglePause(); }
+      const isControl = event.target instanceof HTMLElement && event.target.closest('button, a, input, select, textarea');
+      if (event.key === ' ' && !isControl) { event.preventDefault(); togglePause(); }
       if (event.key.toLowerCase() === 'r' && (status === 'won' || status === 'lost')) restart();
     };
     window.addEventListener('keydown', onKey);
@@ -107,21 +113,23 @@ export default function Game() {
   useEffect(() => {
     if (status !== 'playing') return;
 
-    if (spawned < zombiesThisWave && elapsed - lastSpawnAt.current >= (spawned === 0 ? 1200 : Math.max(2600, 5100 - spawned * 150))) {
-      const row = Math.floor(Math.random() * ROWS);
-      const logQuotaBefore = Math.floor(spawned * logZombiesThisWave / zombiesThisWave);
-      const logQuotaAfter = Math.floor((spawned + 1) * logZombiesThisWave / zombiesThisWave);
-      const zombieType = logQuotaAfter > logQuotaBefore ? 'log-zombie' : 'pothead-shambler';
-      const definition = ZOMBIES[zombieType];
-      const healthBonus = Math.floor(spawned / 4) * 15 * (zombieType === 'log-zombie' ? 2 : 1);
-      const maxHealth = definition.health + healthBonus;
-      setZombies((current) => [...current, {
-        uid: serial.current++, type: definition.id, row, x: 9.25,
-        health: maxHealth, maxHealth, biting: false, hitUntil: 0,
-      }]);
-      setSpawned((value) => value + 1);
+    if (spawned < zombiesThisWave && elapsed - lastSpawnAt.current >= getSpawnDelayMs(difficulty, spawned)) {
+      const group = getSpawnGroup(difficulty, currentWave, spawned)!;
+      const definition = ZOMBIES[group.type];
+      const maxHealth = definition.health + group.healthBonus;
+      const availableRows = Array.from({ length: ROWS }, (_, row) => row);
+      const newcomers: ZombieEntity[] = Array.from({ length: group.count }, () => {
+        // Keep members of one group in different lanes so they remain readable.
+        const [row] = availableRows.splice(Math.floor(Math.random() * availableRows.length), 1);
+        return {
+          uid: serial.current++, type: definition.id, row, x: 9.25,
+          health: maxHealth, maxHealth, biting: false, hitUntil: 0,
+        };
+      });
+      setZombies((current) => [...current, ...newcomers]);
+      setSpawned((value) => value + group.count);
       lastSpawnAt.current = elapsed;
-      setNotice(zombieType === 'log-zombie' ? `Wave ${currentWave}: a Log Zombie entered the yard!` : currentWave === TOTAL_WAVES && spawned > 7 ? 'Final wave incoming!' : `Wave ${currentWave}: a shambler entered the yard.`);
+      setNotice(group.type === 'log-zombie' ? `Wave ${currentWave}: a Log Zombie entered the yard!` : currentWave === TOTAL_WAVES && spawned / DIFFICULTIES[difficulty].multiplier > 7 ? 'Final wave incoming!' : `Wave ${currentWave}: a shambler entered the yard.`);
     }
 
     if (elapsed - lastSunAt.current >= 5600) {
@@ -278,7 +286,7 @@ export default function Game() {
   };
 
   const progress = Math.min(100, ((waveKills + spawned * .25) / (zombiesThisWave * 1.25)) * 100);
-  const nextSpawn = Math.max(0, Math.ceil(((lastSpawnAt.current + (spawned === 0 ? 1200 : Math.max(2600, 5100 - spawned * 150))) - elapsed) / 1000));
+  const nextSpawn = Math.max(0, Math.ceil((lastSpawnAt.current + getSpawnDelayMs(difficulty, spawned) - elapsed) / 1000));
 
   return (
     <main className="game-shell">
@@ -288,6 +296,16 @@ export default function Game() {
           <span className="brand-mark">BB</span>
           <span><strong>BACKYARD</strong><b>BRIGADE</b></span>
         </a>
+        <div className="mode-bar" role="group" aria-label="Difficulty. Changing mode starts a new game.">
+          <span className="mode-label">MODE</span>
+          {DIFFICULTY_OPTIONS.map((mode) => {
+            const definition = DIFFICULTIES[mode];
+            return <button type="button" key={mode} className="mode-option" aria-pressed={difficulty === mode} onClick={() => changeDifficulty(mode)} title={`Start a new ${definition.label} game (${definition.multiplier}× zombies)`}>
+              <img src={definition.icon} alt="" width={32} height={32} draggable={false} />
+              <span className="mode-copy"><b>{definition.label}</b><small>{definition.multiplier}×</small></span>
+            </button>;
+          })}
+        </div>
         <div className="round-pill"><span /> Wave {currentWave} of {TOTAL_WAVES} · Home turf</div>
         <div className="topbar-actions">
           <button className={`icon-button music-button ${musicEnabled ? '' : 'off'}`} aria-label={musicEnabled ? 'Mute background music' : 'Play background music'} title={musicEnabled ? 'Mute music' : 'Play music'} onClick={toggleMusic}>{musicEnabled ? '♫' : '♪'}</button>
@@ -359,7 +377,7 @@ export default function Game() {
               {status !== 'playing' && <div className="game-overlay">
                 <span>{status === 'paused' ? 'FIELD BREAK' : status === 'won' ? 'YARD SECURED' : 'PORCH OVERRUN'}</span>
                 <h1>{status === 'paused' ? 'Game paused' : status === 'won' ? 'Nice gardening.' : 'The shufflers got through.'}</h1>
-                <p>{status === 'paused' ? `Wave ${currentWave} of ${TOTAL_WAVES}. Take a breath.` : `${kills} of ${TOTAL_ZOMBIES} shufflers cleared.`}</p>
+                <p>{status === 'paused' ? `${DIFFICULTIES[difficulty].label} mode · Wave ${currentWave} of ${TOTAL_WAVES}. Take a breath.` : `${DIFFICULTIES[difficulty].label} mode · ${kills} of ${totalZombies} shufflers cleared.`}</p>
                 <button onClick={status === 'paused' ? togglePause : restart}>{status === 'paused' ? 'Keep defending' : 'Try again'}</button>
               </div>}
             </div>
