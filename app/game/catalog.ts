@@ -57,6 +57,22 @@ export const PLANTS: Record<PlantId, PlantDefinition> = {
     projectileSpeed: 1.45,
     image: '/assets/watermelon-plant.png',
   },
+  'mooshoom': {
+    id: 'mooshoom',
+    name: 'Mooshoom',
+    description: 'Free to plant. Purple peas slow zombies within five tiles.',
+    cost: 0,
+    health: 25,
+    attackMode: 'projectile',
+    fireRateMs: 1250,
+    projectileDamage: 6.25,
+    projectileKind: 'purple-pea',
+    projectilesPerVolley: 1,
+    projectileSpeed: 1.85,
+    attackRange: 5,
+    slowEffect: { movementMultiplier: 0.5, durationMs: 3000 },
+    image: '/assets/mooshoom.png',
+  },
 };
 
 export const ZOMBIES: Record<ZombieId, ZombieDefinition> = {

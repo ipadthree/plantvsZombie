@@ -1,6 +1,11 @@
-export type PlantId = 'sprout-scout' | 'stone-shooter' | 'stone-plant' | 'watermelon-plant';
+export type PlantId = 'sprout-scout' | 'stone-shooter' | 'stone-plant' | 'watermelon-plant' | 'mooshoom';
 export type ZombieId = 'pothead-shambler' | 'log-zombie';
-export type ProjectileKind = 'pea' | 'rock' | 'watermelon';
+export type ProjectileKind = 'pea' | 'rock' | 'watermelon' | 'purple-pea';
+
+export type SlowEffect = {
+  movementMultiplier: number;
+  durationMs: number;
+};
 
 type PlantDefinitionBase = {
   id: PlantId;
@@ -18,6 +23,8 @@ export type ProjectilePlantDefinition = PlantDefinitionBase & {
   projectileKind: ProjectileKind;
   projectilesPerVolley: number;
   projectileSpeed: number;
+  attackRange?: number;
+  slowEffect?: SlowEffect;
 };
 
 export type DevourPlantDefinition = PlantDefinitionBase & {
@@ -60,6 +67,8 @@ export type ZombieEntity = {
   maxHealth: number;
   biting: boolean;
   hitUntil: number;
+  slowUntil: number;
+  slowMultiplier: number;
 };
 
 export type ProjectileEntity = {
@@ -69,6 +78,8 @@ export type ProjectileEntity = {
   damage: number;
   kind: ProjectileKind;
   speed: number;
+  maxX?: number;
+  slowEffect?: SlowEffect;
 };
 
 export type SunEntity = {

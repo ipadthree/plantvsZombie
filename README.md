@@ -38,6 +38,7 @@ Difficulty changes zombie quantity. Hard and Crazy expand each Easy encounter in
 | Stone Shooter | 125 | 150 | Fires two rocks per volley, each dealing 22 damage. |
 | Stone Plant | 150 | 125 | Swallows the nearest zombie in range, then digests for 5 seconds. |
 | Watermelon Plant | 200 | 250 | Fires two watermelon slices, each dealing 37.5 damage (1.5× pea damage). |
+| Mooshoom | 0 | 25 | Fires purple peas for 6.25 damage (¼ pea damage) at zombies less than 5 tiles ahead. Hits slow movement by 50% for 3 seconds; repeat hits refresh the effect. |
 
 ### Zombies and waves
 
@@ -52,7 +53,7 @@ In Easy mode, each wave contains 12 Pothead Shamblers. Wave 2 adds 5 Log Zombies
 
 | Input | Action |
 | --- | --- |
-| `1`–`4` | Select a plant card |
+| `1`–`5` | Select a plant card (Mooshoom is `5`) |
 | Click a plant card | Select or deselect that plant |
 | Click a lawn tile | Place the selected plant |
 | Click a sun token | Collect sun |
@@ -71,6 +72,7 @@ app/
 ├── game/
 │   ├── Game.tsx       # Game clock, simulation, input, waves, combat, and rendering
 │   ├── catalog.ts     # Data-driven plant and zombie definitions
+│   ├── combat.ts      # Target ranges, projectile limits, and temporary slows
 │   ├── difficulty.ts  # Difficulty multipliers, wave quotas, and spawn groups
 │   └── types.ts       # Definition and entity contracts
 ├── globals.css        # Board layout, responsive UI, and character animations
@@ -117,7 +119,7 @@ npx tsc --noEmit
 npm run lint
 ```
 
-The tests verify exact wave quotas, spawn timing and health parity, and cumulative victory totals for all three difficulties.
+The tests verify exact wave quotas, spawn timing and health parity, cumulative victory totals, Mooshoom's strict range limit, and slow refresh/expiry behavior.
 
 ## Add custom characters
 
