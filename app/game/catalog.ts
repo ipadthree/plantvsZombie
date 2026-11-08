@@ -71,7 +71,7 @@ export const PLANTS: Record<PlantId, PlantDefinition> = {
     projectileSpeed: 1.85,
     attackRange: 5,
     slowEffect: { movementMultiplier: 0.5, durationMs: 3000 },
-    image: '/assets/mooshoom.png',
+    image: '/assets/mooshoom-no-leaves.png',
   },
 };
 
