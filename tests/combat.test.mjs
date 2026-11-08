@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PLANTS, ZOMBIES } from '../app/game/catalog.ts';
-import { applySlow, canProjectileHit, canShootAtZombie, getZombieSpeed, isProjectileInRange } from '../app/game/combat.ts';
+import { advanceZombie, applySlow, canProjectileHit, canShootAtZombie, getZombieSpeed, hasZombieReachedHouse, isProjectileInRange } from '../app/game/combat.ts';
 
 const mooshoom = PLANTS.mooshoom;
 const plant = { row: 2, col: 0 };
@@ -75,4 +75,39 @@ test('repeat hits refresh slow without stacking speed penalties or duration', ()
   assert.equal(getZombieSpeed(refreshed, 0.105, 4999), 0.0525);
   assert.equal(getZombieSpeed(refreshed, 0.105, 5000), 0.105);
   assert.equal(applySlow(refreshed, mooshoom.slowEffect, 6000).slowUntil, 9000);
+});
+
+test('the first living zombie at the house boundary triggers a breach in every lane and for both types', () => {
+  for (const type of Object.keys(ZOMBIES)) {
+    for (let row = 0; row < 5; row++) {
+      assert.equal(hasZombieReachedHouse([{ ...zombie, type, row, x: 0.08 }]), true);
+      assert.equal(hasZombieReachedHouse([{ ...zombie, type, row, x: -0.1 }]), true);
+      assert.equal(hasZombieReachedHouse([{ ...zombie, type, row, x: 0.081 }]), false);
+    }
+  }
+  assert.equal(hasZombieReachedHouse([]), false);
+  assert.equal(hasZombieReachedHouse([{ ...zombie, x: 0, health: 0 }]), false);
+  assert.equal(hasZombieReachedHouse([{ ...zombie, x: 9.25 }]), false);
+});
+
+test('a zombie resumes walking after its blocking plant is eaten and triggers game over without disappearing', () => {
+  const eating = { ...zombie, x: 0.081, biting: true };
+  const blocked = advanceZombie(eating, true, 0.105, 1000, 50);
+  assert.equal(blocked.x, eating.x);
+  assert.equal(hasZombieReachedHouse([blocked]), false);
+
+  const intruder = advanceZombie(blocked, false, 0.105, 1050, 50);
+  assert.equal(hasZombieReachedHouse([intruder]), true);
+  assert.equal(intruder.biting, false);
+  assert.equal(intruder.uid, eating.uid);
+  assert.equal(intruder.health, eating.health);
+  assert.equal(eating.x, 0.081);
+});
+
+test('a slowed zombie still triggers a breach on the tick it reaches the house', () => {
+  let approaching = applySlow({ ...zombie, x: 0.084 }, mooshoom.slowEffect, 0);
+  approaching = advanceZombie(approaching, false, 0.105, 50, 50);
+  assert.equal(hasZombieReachedHouse([approaching]), false);
+  approaching = advanceZombie(approaching, false, 0.105, 100, 50);
+  assert.equal(hasZombieReachedHouse([approaching]), true);
 });

@@ -38,3 +38,15 @@ export function applySlow(zombie: ZombieEntity, effect: SlowEffect, elapsed: num
 export function getZombieSpeed(zombie: ZombieEntity, baseSpeed: number, elapsed: number) {
   return baseSpeed * (zombie.slowUntil > elapsed ? zombie.slowMultiplier : 1);
 }
+
+export function advanceZombie(zombie: ZombieEntity, blocked: boolean, baseSpeed: number, elapsed: number, tickMs: number): ZombieEntity {
+  return {
+    ...zombie,
+    biting: blocked,
+    x: blocked ? zombie.x : zombie.x - getZombieSpeed(zombie, baseSpeed, elapsed) * tickMs / 1000,
+  };
+}
+
+export function hasZombieReachedHouse(zombies: readonly ZombieEntity[]) {
+  return zombies.some((zombie) => zombie.health > 0 && zombie.x <= 0.08);
+}

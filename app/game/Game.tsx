@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PLANTS, ZOMBIES } from './catalog';
-import { applySlow, canProjectileHit, canShootAtZombie, getZombieSpeed, isProjectileInRange } from './combat';
+import { advanceZombie, applySlow, canProjectileHit, canShootAtZombie, hasZombieReachedHouse, isProjectileInRange } from './combat';
 import { DIFFICULTIES, DIFFICULTY_OPTIONS, TOTAL_WAVES, getKillsBeforeWave, getSpawnDelayMs, getSpawnGroup, getTotalZombies, getWaveCounts } from './difficulty';
 import type { Difficulty } from './difficulty';
 import type { PlantEntity, PlantId, ProjectileEntity, SlowEffect, SunEntity, ZombieEntity } from './types';
@@ -27,7 +27,6 @@ export default function Game() {
   const [kills, setKills] = useState(0);
   const [spawned, setSpawned] = useState(0);
   const [elapsed, setElapsed] = useState(0);
-  const [mowers, setMowers] = useState<boolean[]>(Array(ROWS).fill(true));
   const [notice, setNotice] = useState('Pick a plant, then choose a tile.');
   const [musicEnabled, setMusicEnabled] = useState(true);
   const serial = useRef(1);
@@ -41,7 +40,7 @@ export default function Game() {
   const restart = useCallback(() => {
     setEnergy(150); setPlants([]); setZombies([]); setProjectiles([]); setSuns([]);
     setStatus('playing'); setCurrentWave(1); setKills(0); setSpawned(0); setElapsed(0);
-    setMowers(Array(ROWS).fill(true)); setSelectedPlant('sprout-scout');
+    setSelectedPlant('sprout-scout');
     setNotice('Pick a plant, then choose a tile.');
     lastSpawnAt.current = 0; lastSunAt.current = 0;
   }, []);
@@ -114,6 +113,20 @@ export default function Game() {
 
   useEffect(() => {
     if (status !== 'playing') return;
+
+    const moveZombie = (zombie: ZombieEntity) => {
+      const blocked = plants.some((plant) => plant.row === zombie.row && Math.abs(zombie.x - (plant.col + 0.5)) < 0.52);
+      return advanceZombie(zombie, blocked, ZOMBIES[zombie.type].speed, elapsed, TICK_MS);
+    };
+    const movedZombies = zombies.map(moveZombie);
+    // The first breach ends this tick before spawning, attacks, rewards, or wave
+    // progression can erase the intruder or turn the defeat into a victory.
+    if (hasZombieReachedHouse(movedZombies)) {
+      setZombies(movedZombies);
+      setStatus('lost');
+      setNotice('zombie ate your brain — game over.');
+      return;
+    }
 
     if (spawned < zombiesThisWave && elapsed - lastSpawnAt.current >= getSpawnDelayMs(difficulty, spawned)) {
       const group = getSpawnGroup(difficulty, currentWave, spawned)!;
@@ -202,26 +215,9 @@ export default function Game() {
       return [...damaged];
     });
 
-    setZombies((currentZombies) => {
-      let next = currentZombies.filter((zombie) => !claimedZombies.has(zombie.uid)).map((zombie) => {
-        const blockingPlant = plants.find((plant) => plant.row === zombie.row && Math.abs(zombie.x - (plant.col + 0.5)) < 0.52);
-        return { ...zombie, biting: Boolean(blockingPlant), x: blockingPlant ? zombie.x : zombie.x - getZombieSpeed(zombie, ZOMBIES[zombie.type].speed, elapsed) * TICK_MS / 1000 };
-      });
-
-      const breachedRows = new Set(next.filter((zombie) => zombie.x < 0.08).map((zombie) => zombie.row));
-      breachedRows.forEach((row) => {
-        if (mowers[row]) {
-          const cleared = next.filter((zombie) => zombie.row === row).length;
-          next = next.filter((zombie) => zombie.row !== row);
-          if (cleared) setKills((value) => value + cleared);
-          setMowers((current) => current.map((ready, index) => index === row ? false : ready));
-          setNotice('Lawn mower activated! That lane is now exposed.');
-        } else {
-          setStatus('lost');
-        }
-      });
-      return next;
-    });
+    setZombies((currentZombies) => currentZombies
+      .filter((zombie) => !claimedZombies.has(zombie.uid))
+      .map(moveZombie));
 
     setProjectiles((currentShots) => {
       const moved = currentShots.map((shot) => ({ ...shot, x: shot.x + shot.speed * TICK_MS / 1000 }));
@@ -292,6 +288,7 @@ export default function Game() {
   };
 
   const collectSun = (sun: SunEntity) => {
+    if (status !== 'playing') return;
     setEnergy((value) => value + sun.value);
     setSuns((current) => current.filter((item) => item.uid !== sun.uid));
     setNotice(`+${sun.value} sun collected.`);
@@ -368,7 +365,6 @@ export default function Game() {
               {Array.from({ length: ROWS }, (_, row) => Array.from({ length: COLS }, (__, col) => (
                 <button className="tile" key={`${row}-${col}`} onClick={() => placePlant(row, col)} aria-label={`Plant at lane ${row + 1}, tile ${col + 1}`} />
               )))}
-              {mowers.map((ready, row) => ready && <div className="mower" key={row} style={{ top: `${(row + .5) / ROWS * 100}%` }}>⇥</div>)}
               {plants.map((plant) => {
                 const definition = PLANTS[plant.type];
                 const devouring = definition.attackMode === 'devour' && plant.pulseUntil > elapsed;
@@ -393,9 +389,9 @@ export default function Game() {
               {projectiles.map((shot) => <span className={`projectile ${shot.kind}`} key={shot.uid} style={{ left: `${(shot.x + .5) / COLS * 100}%`, top: `${(shot.row + .5) / ROWS * 100}%` }} />)}
               {suns.map((sun) => <button className="falling-sun" key={sun.uid} style={{ left: `${sun.x}%`, top: `${sun.y}%` }} onClick={() => collectSun(sun)} aria-label={`Collect ${sun.value} sun`}>☀<small>+{sun.value}</small></button>)}
               </div>
-              {status !== 'playing' && <div className="game-overlay">
-                <span>{status === 'paused' ? 'FIELD BREAK' : status === 'won' ? 'YARD SECURED' : 'PORCH OVERRUN'}</span>
-                <h1>{status === 'paused' ? 'Game paused' : status === 'won' ? 'Nice gardening.' : 'The shufflers got through.'}</h1>
+              {status !== 'playing' && <div className="game-overlay" role={status === 'lost' ? 'alertdialog' : 'dialog'} aria-modal="true" aria-labelledby="game-overlay-title">
+                <span>{status === 'paused' ? 'FIELD BREAK' : status === 'won' ? 'YARD SECURED' : 'GAME OVER'}</span>
+                <h1 id="game-overlay-title">{status === 'paused' ? 'Game paused' : status === 'won' ? 'Nice gardening.' : 'zombie ate your brain'}</h1>
                 <p>{status === 'paused' ? `${DIFFICULTIES[difficulty].label} mode · Wave ${currentWave} of ${TOTAL_WAVES}. Take a breath.` : `${DIFFICULTIES[difficulty].label} mode · ${kills} of ${totalZombies} shufflers cleared.`}</p>
                 <button onClick={status === 'paused' ? togglePause : restart}>{status === 'paused' ? 'Keep defending' : 'Try again'}</button>
               </div>}

@@ -15,7 +15,7 @@ The game runs entirely in the browser. Music may begin after the first click or 
 - Spend sun to place plants on the 5 × 9 lawn.
 - Projectile plants automatically attack zombies in their lane after the zombies enter the playable lawn.
 - Collect falling sun tokens to fund more plants.
-- Each lane has a one-use lawn mower as its last line of defense.
+- Any zombie reaching the house-side edge immediately ends the game with “zombie ate your brain”.
 - Clear all three waves to secure the yard.
 
 ### Difficulty modes
