@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { ZOMBIES } from '../app/game/catalog.ts';
 import { DIFFICULTIES, TOTAL_WAVES, getKillsBeforeWave, getSpawnDelayMs, getSpawnGroup, getTotalZombies, getWaveCounts } from '../app/game/difficulty.ts';
 
 function spawnWave(mode, wave) {
@@ -42,8 +43,21 @@ test('difficulty scales only group size and preserves Easy timing, type, and hea
     }
     easy.forEach((group, index) => {
       assert.equal(group.delay, index === 0 ? 1200 : Math.max(2600, 5100 - index * 150));
-      assert.equal(group.healthBonus, Math.floor(index / 4) * 15 * (group.type === 'log-zombie' ? 2 : 1));
+      assert.equal(group.healthBonus, Math.floor(index / 4) * 30 * (group.type === 'log-zombie' ? 2 : 1));
     });
+  }
+});
+
+test('every zombie has exactly twice its previous total health across all modes and waves', () => {
+  const previousBaseHealth = { 'pothead-shambler': 125, 'log-zombie': 250 };
+  for (const mode of Object.keys(DIFFICULTIES)) {
+    for (let wave = 1; wave <= TOTAL_WAVES; wave++) {
+      spawnWave(mode, wave).forEach((group, index) => {
+        const previousBonus = Math.floor(index / 4) * 15 * (group.type === 'log-zombie' ? 2 : 1);
+        const maxHealth = ZOMBIES[group.type].health + group.healthBonus;
+        assert.equal(maxHealth, 2 * (previousBaseHealth[group.type] + previousBonus));
+      });
+    }
   }
 });
 

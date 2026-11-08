@@ -79,7 +79,7 @@ export const ZOMBIES: Record<ZombieId, ZombieDefinition> = {
   'pothead-shambler': {
     id: 'pothead-shambler',
     name: 'Pothead Shambler',
-    health: 125,
+    health: 250,
     speed: 0.105,
     damagePerSecond: 17,
     reward: 20,
@@ -88,7 +88,7 @@ export const ZOMBIES: Record<ZombieId, ZombieDefinition> = {
   'log-zombie': {
     id: 'log-zombie',
     name: 'Log Zombie',
-    health: 250,
+    health: 500,
     speed: 0.084,
     damagePerSecond: 17,
     reward: 20,

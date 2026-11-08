@@ -57,6 +57,6 @@ export function getSpawnGroup(difficulty: Difficulty, wave: number, spawned: num
   return {
     type,
     count: Math.min(multiplier, counts.total - spawned),
-    healthBonus: Math.floor(baseIndex / 4) * 15 * (type === 'log-zombie' ? 2 : 1),
+    healthBonus: Math.floor(baseIndex / 4) * 30 * (type === 'log-zombie' ? 2 : 1),
   };
 }

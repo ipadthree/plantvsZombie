@@ -44,10 +44,10 @@ Difficulty changes zombie quantity. Hard and Crazy expand each Easy encounter in
 
 | Enemy | Base health | Speed | Behavior |
 | --- | ---: | ---: | --- |
-| Pothead Shambler | 125 | 100% | Walks down a lane and bites plants on contact. |
-| Log Zombie | 250 | 80% | Appears from wave 2 and swings its log at plants. |
+| Pothead Shambler | 250 | 100% | Walks down a lane and bites plants on contact. |
+| Log Zombie | 500 | 80% | Appears from wave 2 and swings its log at plants. |
 
-In Easy mode, each wave contains 12 Pothead Shamblers. Wave 2 adds 5 Log Zombies, and wave 3 adds 7, for 48 enemies across the full game. Later encounters receive a small health increase; the same curve applies in every mode.
+In Easy mode, each wave contains 12 Pothead Shamblers. Wave 2 adds 5 Log Zombies, and wave 3 adds 7, for 48 enemies across the full game. Later encounters receive a small health increase; the same curve applies in every mode. Both base health and encounter health bonuses have been doubled, so every spawned zombie has twice its previous total health in all three modes.
 
 ## Controls
 
