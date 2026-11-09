@@ -58,7 +58,7 @@ button { font:inherit; }
 .zombie.zombie-horse img{object-position:center bottom}
 .missile-reload{position:absolute;top:4%;right:6%;padding:3px 6px;border:1px solid #402919;border-radius:7px;background:#f7d89e;color:#603324;font-size:10px;font-weight:900;white-space:nowrap}
 .missile-effects{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:6;border-radius:12px}
-.zombie.t-rex-zombie{width:21%;height:20%;transform:translate(-43%,-100%);animation:rex-stomp .7s ease-in-out infinite alternate}
+.zombie.t-rex-zombie{z-index:5;width:21%;height:20%;transform:translate(-43%,-100%);animation:rex-stomp .7s ease-in-out infinite alternate}
 .zombie.t-rex-zombie img{object-position:center bottom}
 .zombie.t-rex-zombie.biting{animation:rex-chomp .35s ease-in-out infinite alternate}
 .t-rex-zombie .enemy-health{height:7px;border-color:#5a341a}.t-rex-zombie .enemy-health i{background:#e9ae31}
