@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "plantId": "fireshroom",
+  "status": "artwork-ready",
+  "gameplay": {
+    "health": 100,
+    "sunCost": 200,
+    "rangeTiles": 2,
+    "fireDurationMs": 3000,
+    "rechargeMs": 5000,
+    "damageMatches": "watermelon-plant"
+  },
+  "character": {
+    "masterSize": [1254, 1254],
+    "gameSize": [512, 512],
+    "facing": "right",
+    "idle": "idle.webp",
+    "firing": "firing.webp",
+    "recharging": "recharging.webp",
+    "rechargeQuestionMarkIncluded": true,
+    "icon": "icon.webp"
+  },
+  "fire": {
+    "masterSize": [1774, 887],
+    "gameSize": [1024, 512],
+    "frames": ["fire-1.webp", "fire-2.webp", "fire-3.webp"],
+    "frameDurationMs": 100,
+    "facing": "right"
+  },
+  "preview": "preview.gif"
+}
