@@ -13,20 +13,20 @@ function spawnWave(mode, wave) {
   return groups;
 }
 
-test('all three modes spawn the exact regular and Log Zombie quotas in all three waves', () => {
+test('all modes preserve regular/log quotas and add exact Horse Missile Zombie quotas', () => {
   const expected = {
-    easy: [[12, 0], [12, 5], [12, 7]],
-    hard: [[24, 0], [24, 10], [24, 14]],
-    crazy: [[48, 0], [48, 20], [48, 28]],
+    easy: [[12, 0, 0], [12, 5, 1], [12, 7, 2]],
+    hard: [[24, 0, 0], [24, 10, 2], [24, 14, 4]],
+    crazy: [[48, 0, 0], [48, 20, 4], [48, 28, 8]],
   };
   for (const [mode, waves] of Object.entries(expected)) {
     for (let wave = 1; wave <= TOTAL_WAVES; wave++) {
-      const counts = { 'pothead-shambler': 0, 'log-zombie': 0 };
+      const counts = { 'pothead-shambler': 0, 'log-zombie': 0, 'horse-missile-zombie': 0 };
       for (const group of spawnWave(mode, wave)) counts[group.type] += group.count;
-      const [regular, log] = waves[wave - 1];
-      assert.deepEqual(counts, { 'pothead-shambler': regular, 'log-zombie': log });
-      assert.deepEqual(getWaveCounts(mode, wave), { regular, log, total: regular + log });
-      assert.equal(getSpawnGroup(mode, wave, regular + log), null);
+      const [regular, log, horseMissile] = waves[wave - 1];
+      assert.deepEqual(counts, { 'pothead-shambler': regular, 'log-zombie': log, 'horse-missile-zombie': horseMissile });
+      assert.deepEqual(getWaveCounts(mode, wave), { regular, log, horseMissile, total: regular + log + horseMissile });
+      assert.equal(getSpawnGroup(mode, wave, regular + log + horseMissile), null);
     }
   }
 });
@@ -41,20 +41,24 @@ test('difficulty scales only group size and preserves Easy timing, type, and hea
         assert.deepEqual(group, { ...easy[index], count: DIFFICULTIES[mode].multiplier });
       });
     }
+    let originalIndex = 0;
     easy.forEach((group, index) => {
       assert.equal(group.delay, index === 0 ? 1200 : Math.max(2600, 5100 - index * 150));
-      assert.equal(group.healthBonus, Math.floor(index / 4) * 30 * (group.type === 'log-zombie' ? 2 : 1));
+      assert.equal(group.healthBonus, group.type === 'horse-missile-zombie' ? 0 : Math.floor(originalIndex / 4) * 30 * (group.type === 'log-zombie' ? 2 : 1));
+      if (group.type !== 'horse-missile-zombie') originalIndex++;
     });
   }
 });
 
-test('every zombie has exactly twice its previous total health across all modes and waves', () => {
+test('existing zombies retain doubled health; new Horse Missile Zombies always have 600 HP', () => {
   const previousBaseHealth = { 'pothead-shambler': 125, 'log-zombie': 250 };
   for (const mode of Object.keys(DIFFICULTIES)) {
     for (let wave = 1; wave <= TOTAL_WAVES; wave++) {
-      spawnWave(mode, wave).forEach((group, index) => {
-        const previousBonus = Math.floor(index / 4) * 15 * (group.type === 'log-zombie' ? 2 : 1);
+      let originalIndex = 0;
+      spawnWave(mode, wave).forEach((group) => {
         const maxHealth = ZOMBIES[group.type].health + group.healthBonus;
+        if (group.type === 'horse-missile-zombie') { assert.equal(maxHealth, 600); return; }
+        const previousBonus = Math.floor(originalIndex++ / 4) * 15 * (group.type === 'log-zombie' ? 2 : 1);
         assert.equal(maxHealth, 2 * (previousBaseHealth[group.type] + previousBonus));
       });
     }
@@ -62,7 +66,7 @@ test('every zombie has exactly twice its previous total health across all modes 
 });
 
 test('wave transitions and final victory use the selected mode totals', () => {
-  for (const [mode, total] of Object.entries({ easy: 48, hard: 96, crazy: 192 })) {
+  for (const [mode, total] of Object.entries({ easy: 51, hard: 102, crazy: 204 })) {
     let cleared = 0;
     for (let wave = 1; wave <= TOTAL_WAVES; wave++) {
       assert.equal(getKillsBeforeWave(mode, wave), cleared);

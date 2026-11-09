@@ -11,9 +11,9 @@ export type Difficulty = keyof typeof DIFFICULTIES;
 export const DIFFICULTY_OPTIONS = Object.keys(DIFFICULTIES) as Difficulty[];
 
 const BASE_WAVES = [
-  { regular: 12, log: 0 },
-  { regular: 12, log: 5 },
-  { regular: 12, log: 7 },
+  { regular: 12, log: 0, horseMissile: 0 },
+  { regular: 12, log: 5, horseMissile: 1 },
+  { regular: 12, log: 7, horseMissile: 2 },
 ] as const;
 
 export const TOTAL_WAVES = BASE_WAVES.length;
@@ -24,7 +24,8 @@ export function getWaveCounts(difficulty: Difficulty, wave: number) {
   const multiplier = DIFFICULTIES[difficulty].multiplier;
   const regular = base.regular * multiplier;
   const log = base.log * multiplier;
-  return { regular, log, total: regular + log };
+  const horseMissile = base.horseMissile * multiplier;
+  return { regular, log, horseMissile, total: regular + log + horseMissile };
 }
 
 export function getTotalZombies(difficulty: Difficulty) {
@@ -49,14 +50,20 @@ export function getSpawnGroup(difficulty: Difficulty, wave: number, spawned: num
   const multiplier = DIFFICULTIES[difficulty].multiplier;
   const baseIndex = Math.floor(spawned / multiplier);
   const base = BASE_WAVES[wave - 1];
-  const baseTotal = base.regular + base.log;
-  const logQuotaBefore = Math.floor(baseIndex * base.log / baseTotal);
-  const logQuotaAfter = Math.floor((baseIndex + 1) * base.log / baseTotal);
-  const type: ZombieId = logQuotaAfter > logQuotaBefore ? 'log-zombie' : 'pothead-shambler';
+  const baseTotal = base.regular + base.log + base.horseMissile;
+  const horseQuotaBefore = Math.floor(baseIndex * base.horseMissile / baseTotal);
+  const horseQuotaAfter = Math.floor((baseIndex + 1) * base.horseMissile / baseTotal);
+  // Spread the new encounters through each wave, preserving every regular/log slot.
+  const originalIndex = baseIndex - horseQuotaBefore;
+  const originalTotal = base.regular + base.log;
+  const logQuotaBefore = Math.floor(originalIndex * base.log / originalTotal);
+  const logQuotaAfter = Math.floor((originalIndex + 1) * base.log / originalTotal);
+  const type: ZombieId = horseQuotaAfter > horseQuotaBefore ? 'horse-missile-zombie'
+    : logQuotaAfter > logQuotaBefore ? 'log-zombie' : 'pothead-shambler';
 
   return {
     type,
     count: Math.min(multiplier, counts.total - spawned),
-    healthBonus: Math.floor(baseIndex / 4) * 30 * (type === 'log-zombie' ? 2 : 1),
+    healthBonus: type === 'horse-missile-zombie' ? 0 : Math.floor(originalIndex / 4) * 30 * (type === 'log-zombie' ? 2 : 1),
   };
 }

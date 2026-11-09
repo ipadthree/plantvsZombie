@@ -22,11 +22,11 @@ The game runs entirely in the browser. Music may begin after the first click or 
 
 Use the mode bar at the top of the game to choose a difficulty. Each option has a plant expression icon: relaxed for Easy, tense for Hard, and sweating for Crazy. Switching modes starts a fresh game; restarting after a win or loss keeps the selected mode.
 
-| Mode | Wave 1 (regular / log) | Wave 2 (regular / log) | Wave 3 (regular / log) | Total |
+| Mode | Wave 1 (regular / log / missile) | Wave 2 (regular / log / missile) | Wave 3 (regular / log / missile) | Encounters |
 | --- | --- | --- | --- | ---: |
-| Easy · 1× | 12 / 0 | 12 / 5 | 12 / 7 | 48 |
-| Hard · 2× | 24 / 0 | 24 / 10 | 24 / 14 | 96 |
-| Crazy · 4× | 48 / 0 | 48 / 20 | 48 / 28 | 192 |
+| Easy · 1× | 12 / 0 / 0 | 12 / 5 / 1 | 12 / 7 / 2 | 51 |
+| Hard · 2× | 24 / 0 / 0 | 24 / 10 / 2 | 24 / 14 / 4 | 102 |
+| Crazy · 4× | 48 / 0 / 0 | 48 / 20 / 4 | 48 / 28 / 8 | 204 |
 
 Difficulty changes zombie quantity. Hard and Crazy expand each Easy encounter into groups of two or four across different lanes, preserving the existing encounter timing and health progression. Plant stats, zombie stats, and sun rules stay the same.
 
@@ -47,8 +47,12 @@ Difficulty changes zombie quantity. Hard and Crazy expand each Easy encounter in
 | --- | ---: | ---: | --- |
 | Pothead Shambler | 250 | 100% | Walks down a lane and bites plants on contact. |
 | Log Zombie | 500 | 80% | Appears from wave 2 and swings its log at plants. |
+| Horse Missile Zombie | 600 | 150% | Fires three missiles at the three tiles ahead in its lane, each dealing 50 damage. Recharges for 15 seconds while walking and biting normally. |
+| Zombie Horse | 250 | 100% | Survives the Horse Missile Zombie's defeat and continues walking and biting with normal-zombie stats. No missiles. |
 
-In Easy mode, each wave contains 12 Pothead Shamblers. Wave 2 adds 5 Log Zombies, and wave 3 adds 7, for 48 enemies across the full game. Later encounters receive a small health increase; the same curve applies in every mode. Both base health and encounter health bonuses have been doubled, so every spawned zombie has twice its previous total health in all three modes.
+In Easy mode, each wave contains 12 Pothead Shamblers. Wave 2 adds 5 Log Zombies and 1 Horse Missile Zombie; wave 3 adds 7 Log Zombies and 2 Horse Missile Zombies. Hard and Crazy multiply every quota by 2 and 4. A Horse Missile Zombie and its surviving horse count as one encounter: the wave only credits a defeat after the horse is defeated, including when Stone Plant swallows the zombie. Regular/log enemies retain their existing health progression; Horse Missile Zombies always start at 600 HP and surviving horses at 250 HP.
+
+Missiles launch only after the zombie enters the lawn. Each locks onto a separate tile ahead, travels for 650 ms, then deals 50 damage to the plant on that tile. Empty tiles still absorb their missile; there is no damage to adjacent rows. Near the house edge, targets outside the board are omitted. The empty launcher sprite and countdown show its 15-second recharge. Missiles already in flight remain active if their launcher is defeated. Pausing freezes flight, damage, and recharge timers.
 
 ## Controls
 
@@ -75,6 +79,7 @@ app/
 │   ├── catalog.ts     # Data-driven plant and zombie definitions
 │   ├── combat.ts      # Target ranges, projectile limits, and temporary slows
 │   ├── difficulty.ts  # Difficulty multipliers, wave quotas, and spawn groups
+│   ├── enemies.ts     # Missile targeting/impacts and zombie-to-horse transitions
 │   └── types.ts       # Definition and entity contracts
 ├── globals.css        # Board layout, responsive UI, and character animations
 ├── layout.tsx         # Page metadata and document shell
@@ -83,7 +88,7 @@ public/
 └── assets/             # Yard, character, animation-frame, and music assets
 ```
 
-The simulation uses a 50 ms game tick. Runtime entities are stored as React state, while character balance and asset paths live in registries so new plants and zombies can be added without duplicating UI code. Plant behaviors use a discriminated `attackMode` (`projectile` or `devour`), and projectiles carry their own damage, speed, and visual kind.
+The simulation uses a 50 ms game tick. Runtime entities are stored as React state, while character balance and asset paths live in registries so new plants and zombies can be added without duplicating UI code. Plant behaviors use a discriminated `attackMode` (`projectile`, `devour`, or `fire`), and projectiles carry their own damage, speed, and visual kind. Enemy missile volleys have fixed target tiles and game-clock impact times. All enemy defeat paths share one resolver so a surviving horse cannot be skipped by a wave transition.
 
 For a deeper design overview and extension notes, see [GAME_ARCHITECTURE.md](GAME_ARCHITECTURE.md).
 
@@ -120,7 +125,7 @@ npx tsc --noEmit
 npm run lint
 ```
 
-The tests verify exact wave quotas, spawn timing and health parity, cumulative victory totals, Mooshoom's strict range limit, and slow refresh/expiry behavior.
+The tests verify wave quotas and totals, health progression, range/slow behavior, Fireshroom timing, missile targeting/damage/recharge, and the zombie-to-horse transition.
 
 ## Add custom characters
 

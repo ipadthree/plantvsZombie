@@ -4,8 +4,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { PLANTS, ZOMBIES } from './catalog';
 import { advanceZombie, applySlow, canProjectileHit, canShootAtZombie, getFirePhase, hasZombieReachedHouse, isProjectileInRange, stepFirePlant } from './combat';
 import { DIFFICULTIES, DIFFICULTY_OPTIONS, TOTAL_WAVES, getKillsBeforeWave, getSpawnDelayMs, getSpawnGroup, getTotalZombies, getWaveCounts } from './difficulty';
+import { applyMissileImpacts, launchMissiles, MISSILE_IMPACT_MS, resolveZombieDefeats } from './enemies';
 import type { Difficulty } from './difficulty';
-import type { PlantEntity, PlantId, ProjectileEntity, SlowEffect, SunEntity, ZombieEntity } from './types';
+import type { MissileEntity, PlantEntity, PlantId, ProjectileEntity, SlowEffect, SunEntity, ZombieEntity } from './types';
 
 const ROWS = 5;
 const COLS = 9;
@@ -20,6 +21,7 @@ export default function Game() {
   const [plants, setPlants] = useState<PlantEntity[]>([]);
   const [zombies, setZombies] = useState<ZombieEntity[]>([]);
   const [projectiles, setProjectiles] = useState<ProjectileEntity[]>([]);
+  const [missiles, setMissiles] = useState<MissileEntity[]>([]);
   const [suns, setSuns] = useState<SunEntity[]>([]);
   const [selectedPlant, setSelectedPlant] = useState<PlantId | null>('sprout-scout');
   const [status, setStatus] = useState<GameStatus>('playing');
@@ -32,6 +34,7 @@ export default function Game() {
   const serial = useRef(1);
   const lastSpawnAt = useRef(0);
   const lastSunAt = useRef(0);
+  const lastSimulatedAt = useRef(-1);
   const zombiesThisWave = getWaveCounts(difficulty, currentWave).total;
   const totalZombies = getTotalZombies(difficulty);
   const killsBeforeThisWave = getKillsBeforeWave(difficulty, currentWave);
@@ -44,14 +47,19 @@ export default function Game() {
       const image = new window.Image();
       image.src = src;
     });
+    ['/assets/horse-missile-zombie/ready.webp', '/assets/horse-missile-zombie/recharging.webp', '/assets/horse-missile-zombie/horse.webp', '/assets/horse-missile-zombie/missile.webp'].forEach((src) => {
+      const image = new window.Image();
+      image.src = src;
+    });
   }, []);
 
   const restart = useCallback(() => {
-    setEnergy(150); setPlants([]); setZombies([]); setProjectiles([]); setSuns([]);
+    setEnergy(150); setPlants([]); setZombies([]); setProjectiles([]); setMissiles([]); setSuns([]);
     setStatus('playing'); setCurrentWave(1); setKills(0); setSpawned(0); setElapsed(0);
     setSelectedPlant('sprout-scout');
     setNotice('Pick a plant, then choose a tile.');
     lastSpawnAt.current = 0; lastSunAt.current = 0;
+    lastSimulatedAt.current = -1;
   }, []);
 
   const changeDifficulty = (nextDifficulty: Difficulty) => {
@@ -122,13 +130,14 @@ export default function Game() {
   }, [status]);
 
   useEffect(() => {
-    if (status !== 'playing') return;
+    if (status !== 'playing' || lastSimulatedAt.current === elapsed) return;
+    lastSimulatedAt.current = elapsed;
 
-    const moveZombie = (zombie: ZombieEntity) => {
-      const blocked = plants.some((plant) => plant.row === zombie.row && Math.abs(zombie.x - (plant.col + 0.5)) < 0.52);
+    const moveZombie = (zombie: ZombieEntity, blockers = plants) => {
+      const blocked = blockers.some((plant) => plant.row === zombie.row && Math.abs(zombie.x - (plant.col + 0.5)) < 0.52);
       return advanceZombie(zombie, blocked, ZOMBIES[zombie.type].speed, elapsed, TICK_MS);
     };
-    const movedZombies = zombies.map(moveZombie);
+    const movedZombies = zombies.map((zombie) => moveZombie(zombie));
     // The first breach ends this tick before spawning, attacks, rewards, or wave
     // progression can erase the intruder or turn the defeat into a victory.
     if (hasZombieReachedHouse(movedZombies)) {
@@ -138,12 +147,13 @@ export default function Game() {
       return;
     }
 
+    let newcomers: ZombieEntity[] = [];
     if (spawned < zombiesThisWave && elapsed - lastSpawnAt.current >= getSpawnDelayMs(difficulty, spawned)) {
       const group = getSpawnGroup(difficulty, currentWave, spawned)!;
       const definition = ZOMBIES[group.type];
       const maxHealth = definition.health + group.healthBonus;
       const availableRows = Array.from({ length: ROWS }, (_, row) => row);
-      const newcomers: ZombieEntity[] = Array.from({ length: group.count }, () => {
+      newcomers = Array.from({ length: group.count }, () => {
         // Keep members of one group in different lanes so they remain readable.
         const [row] = availableRows.splice(Math.floor(Math.random() * availableRows.length), 1);
         return {
@@ -151,10 +161,9 @@ export default function Game() {
           health: maxHealth, maxHealth, biting: false, hitUntil: 0, slowUntil: 0, slowMultiplier: 1,
         };
       });
-      setZombies((current) => [...current, ...newcomers]);
       setSpawned((value) => value + group.count);
       lastSpawnAt.current = elapsed;
-      setNotice(group.type === 'log-zombie' ? `Wave ${currentWave}: a Log Zombie entered the yard!` : currentWave === TOTAL_WAVES && spawned / DIFFICULTIES[difficulty].multiplier > 7 ? 'Final wave incoming!' : `Wave ${currentWave}: a shambler entered the yard.`);
+      setNotice(group.type === 'horse-missile-zombie' ? `Wave ${currentWave}: Horse Missile Zombie incoming! Watch the next three tiles.` : group.type === 'log-zombie' ? `Wave ${currentWave}: a Log Zombie entered the yard!` : currentWave === TOTAL_WAVES && spawned / DIFFICULTIES[difficulty].multiplier > 7 ? 'Final wave incoming!' : `Wave ${currentWave}: a shambler entered the yard.`);
     }
 
     if (elapsed - lastSunAt.current >= 5600) {
@@ -164,12 +173,20 @@ export default function Game() {
       lastSunAt.current = elapsed;
     }
 
+    const activeMissiles = missiles.filter((missile) => elapsed < missile.impactAt + MISSILE_IMPACT_MS);
+    const armedZombies = zombies.map((zombie) => {
+      const launch = launchMissiles(zombie, ZOMBIES[zombie.type], elapsed, COLS);
+      if (!launch) return zombie;
+      activeMissiles.push(...launch.missiles.map((missile) => ({ ...missile, uid: serial.current++ })));
+      return launch.zombie;
+    });
+    const intactPlants = applyMissileImpacts(plants, activeMissiles, elapsed, TICK_MS);
     const claimedZombies = new Set<number>();
     const devours = new Map<number, number>();
-    plants.forEach((plant) => {
+    intactPlants.forEach((plant) => {
       const definition = PLANTS[plant.type];
       if (definition.attackMode !== 'devour' || plant.digestUntil > elapsed) return;
-      const target = zombies
+      const target = armedZombies
         .filter((zombie) => !claimedZombies.has(zombie.uid)
           && zombie.row === plant.row
           && zombie.x >= plant.col + 0.15
@@ -181,114 +198,97 @@ export default function Game() {
       }
     });
     if (claimedZombies.size) {
-      setKills((value) => value + claimedZombies.size);
-      const reward = zombies
-        .filter((zombie) => claimedZombies.has(zombie.uid))
-        .reduce((total, zombie) => total + ZOMBIES[zombie.type].reward, 0);
-      setEnergy((value) => value + reward);
       setNotice('Stone Plant swallowed a shambler. Digesting for 5 seconds…');
     }
 
     const fireUpdates = new Map<number, PlantEntity>();
     const fireHits = new Map<number, number>();
-    plants.forEach((plant) => {
+    intactPlants.forEach((plant) => {
       const definition = PLANTS[plant.type];
       if (definition.attackMode !== 'fire') return;
-      const attacker = zombies.find((zombie) => zombie.row === plant.row && Math.abs(zombie.x - (plant.col + 0.5)) < 0.52);
+      const attacker = armedZombies.find((zombie) => !claimedZombies.has(zombie.uid) && zombie.row === plant.row && Math.abs(zombie.x - (plant.col + 0.5)) < 0.52);
       if (attacker && plant.health <= ZOMBIES[attacker.type].damagePerSecond * TICK_MS / 1000) return;
-      const update = stepFirePlant(plant, definition, zombies.filter((zombie) => !claimedZombies.has(zombie.uid)), elapsed, TICK_MS, COLS);
+      const update = stepFirePlant(plant, definition, armedZombies.filter((zombie) => !claimedZombies.has(zombie.uid)), elapsed, TICK_MS, COLS);
       fireUpdates.set(plant.uid, update.plant);
       update.hits.forEach((hit) => fireHits.set(hit.uid, (fireHits.get(hit.uid) ?? 0) + hit.damage));
     });
 
-    setPlants((currentPlants) => {
-      const damaged = currentPlants.map((plant) => {
-        const attacker = zombies.find((zombie) => zombie.row === plant.row && Math.abs(zombie.x - (plant.col + 0.5)) < 0.52);
-        const nextPlant = attacker ? { ...plant, health: plant.health - ZOMBIES[attacker.type].damagePerSecond * TICK_MS / 1000 } : plant;
-        if (devours.has(plant.uid)) {
-          const definition = PLANTS[plant.type];
-          if (definition.attackMode === 'devour') {
-            return { ...nextPlant, pulseUntil: elapsed + 430, digestUntil: elapsed + definition.digestMs };
-          }
-        }
-        const fireUpdate = fireUpdates.get(plant.uid);
-        return fireUpdate ? { ...fireUpdate, health: nextPlant.health } : nextPlant;
-      }).filter((plant) => plant.health > 0);
-
-      damaged.forEach((plant) => {
+    const newShots: ProjectileEntity[] = [];
+    const damaged = intactPlants.map((plant) => {
+      const attacker = armedZombies.find((zombie) => !claimedZombies.has(zombie.uid) && zombie.row === plant.row && Math.abs(zombie.x - (plant.col + 0.5)) < 0.52);
+      const nextPlant = attacker ? { ...plant, health: plant.health - ZOMBIES[attacker.type].damagePerSecond * TICK_MS / 1000 } : plant;
+      if (devours.has(plant.uid)) {
         const definition = PLANTS[plant.type];
-        if (definition.attackMode !== 'projectile') return;
-        const hasTarget = zombies.some((zombie) => canShootAtZombie(plant, definition, zombie, COLS));
-        if (hasTarget && elapsed - plant.lastShotAt >= definition.fireRateMs) {
-          plant.lastShotAt = elapsed;
-          plant.pulseUntil = elapsed + 180;
-          const volley = Array.from({ length: definition.projectilesPerVolley }, (_, index) => ({
-            uid: serial.current++,
-            row: plant.row,
-            x: plant.col + 0.78 - index * 0.22,
-            damage: definition.projectileDamage,
-            kind: definition.projectileKind,
-            speed: definition.projectileSpeed,
-            maxX: definition.attackRange === undefined ? undefined : plant.col + definition.attackRange,
-            slowEffect: definition.slowEffect,
-          }));
-          setProjectiles((current) => [...current, ...volley]);
+        if (definition.attackMode === 'devour') {
+          return { ...nextPlant, pulseUntil: elapsed + 430, digestUntil: elapsed + definition.digestMs };
         }
-      });
-      return [...damaged];
-    });
-
-    setZombies((currentZombies) => currentZombies
-      .filter((zombie) => !claimedZombies.has(zombie.uid))
-      .map(moveZombie));
-
-    setProjectiles((currentShots) => {
-      const moved = currentShots.map((shot) => ({ ...shot, x: shot.x + shot.speed * TICK_MS / 1000 }));
-      const consumed = new Set<number>();
-      const hits = new Map<number, number>(fireHits);
-      const slows = new Map<number, SlowEffect>();
-      moved.forEach((shot) => {
-        const target = zombies
-          .filter((zombie) => !claimedZombies.has(zombie.uid) && canProjectileHit(shot, zombie))
-          .sort((a, b) => a.x - b.x)[0];
-        if (target) {
-          consumed.add(shot.uid);
-          hits.set(target.uid, (hits.get(target.uid) || 0) + shot.damage);
-          if (shot.slowEffect) slows.set(target.uid, shot.slowEffect);
-        }
-      });
-      if (hits.size) {
-        setZombies((current) => {
-          let defeated = 0;
-          let reward = 0;
-          const survivors = current.map((zombie) => {
-            const effect = slows.get(zombie.uid);
-            return {
-              ...(effect ? applySlow(zombie, effect, elapsed) : zombie),
-              health: zombie.health - (hits.get(zombie.uid) || 0),
-              hitUntil: hits.has(zombie.uid) ? elapsed + 160 : zombie.hitUntil,
-            };
-          }).filter((zombie) => {
-            if (zombie.health <= 0) { defeated += 1; reward += ZOMBIES[zombie.type].reward; }
-            return zombie.health > 0;
-          });
-          if (defeated) { setKills((value) => value + defeated); setEnergy((value) => value + reward); }
-          return survivors;
-        });
       }
-      return moved.filter((shot) => shot.x < 9.5 && isProjectileInRange(shot) && !consumed.has(shot.uid));
+      const fireUpdate = fireUpdates.get(plant.uid);
+      return fireUpdate ? { ...fireUpdate, health: nextPlant.health } : nextPlant;
+    }).filter((plant) => plant.health > 0);
+
+    damaged.forEach((plant) => {
+      const definition = PLANTS[plant.type];
+      if (definition.attackMode !== 'projectile') return;
+      const hasTarget = armedZombies.some((zombie) => !claimedZombies.has(zombie.uid) && canShootAtZombie(plant, definition, zombie, COLS));
+      if (hasTarget && elapsed - plant.lastShotAt >= definition.fireRateMs) {
+        plant.lastShotAt = elapsed;
+        plant.pulseUntil = elapsed + 180;
+        const volley = Array.from({ length: definition.projectilesPerVolley }, (_, index) => ({
+          uid: serial.current++,
+          row: plant.row,
+          x: plant.col + 0.78 - index * 0.22,
+          damage: definition.projectileDamage,
+          kind: definition.projectileKind,
+          speed: definition.projectileSpeed,
+          maxX: definition.attackRange === undefined ? undefined : plant.col + definition.attackRange,
+          slowEffect: definition.slowEffect,
+        }));
+        newShots.push(...volley);
+      }
     });
+    const moved = [...projectiles, ...newShots].map((shot) => ({ ...shot, x: shot.x + shot.speed * TICK_MS / 1000 }));
+    const consumed = new Set<number>();
+    const hits = new Map<number, number>(fireHits);
+    const slows = new Map<number, SlowEffect>();
+    moved.forEach((shot) => {
+      const target = armedZombies
+        .filter((zombie) => !claimedZombies.has(zombie.uid) && canProjectileHit(shot, zombie))
+        .sort((a, b) => a.x - b.x)[0];
+      if (target) {
+        consumed.add(shot.uid);
+        hits.set(target.uid, (hits.get(target.uid) || 0) + shot.damage);
+        if (shot.slowEffect) slows.set(target.uid, shot.slowEffect);
+      }
+    });
+    const attackedZombies = armedZombies.map((zombie) => {
+      if (claimedZombies.has(zombie.uid)) return { ...zombie, health: 0 };
+      const effect = slows.get(zombie.uid);
+      return {
+        ...moveZombie(effect ? applySlow(zombie, effect, elapsed) : zombie, damaged),
+        health: zombie.health - (hits.get(zombie.uid) || 0),
+        hitUntil: hits.has(zombie.uid) ? elapsed + 160 : zombie.hitUntil,
+      };
+    });
+    const outcome = resolveZombieDefeats(attackedZombies, ZOMBIES);
+    if (outcome.kills) setKills((value) => value + outcome.kills);
+    if (outcome.reward) setEnergy((value) => value + outcome.reward);
+    setPlants(damaged);
+    setZombies([...outcome.zombies, ...newcomers]);
+    setMissiles(activeMissiles);
+    setProjectiles(moved.filter((shot) => shot.x < 9.5 && isProjectileInRange(shot) && !consumed.has(shot.uid)));
   // Elapsed time is the authoritative clock. Every tick renders with the latest
   // entities, then advances the simulation once.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [elapsed, status]);
 
   useEffect(() => {
-    if (status === 'playing' && spawned >= zombiesThisWave && waveKills >= zombiesThisWave && zombies.length === 0) {
+    if (status === 'playing' && spawned >= zombiesThisWave && waveKills >= zombiesThisWave && zombies.length === 0 && missiles.every((missile) => missile.impactAt <= elapsed)) {
       if (currentWave < TOTAL_WAVES) {
         setCurrentWave((wave) => wave + 1);
         setSpawned(0);
         setProjectiles([]);
+        setMissiles([]);
         lastSpawnAt.current = elapsed + 2800;
         setNotice(`Wave ${currentWave + 1} begins in 4 seconds. Get ready!`);
       } else {
@@ -296,7 +296,7 @@ export default function Game() {
         setNotice('All three waves cleared. The backyard is safe—for now.');
       }
     }
-  }, [currentWave, elapsed, spawned, status, waveKills, zombies.length, zombiesThisWave]);
+  }, [currentWave, elapsed, missiles, spawned, status, waveKills, zombies.length, zombiesThisWave]);
 
   const placePlant = (row: number, col: number) => {
     if (status !== 'playing' || !selectedPlant) return;
@@ -378,7 +378,7 @@ export default function Game() {
             <span><b>Fireshroom</b><small>2-tile fire · 3s burn · 5s rest</small></span>
             <em>{PLANTS.fireshroom.cost}</em>
           </button>
-          <div className="field-notes"><b>FIELD NOTES</b><p>Fireshroom burns all zombies in the next two tiles for 3 seconds, then rests for 5 seconds.</p></div>
+          <div className="field-notes"><b>FIELD NOTES</b><p>Horse Missile Zombies blast the three tiles ahead. Their horses keep fighting after they fall!</p></div>
         </aside>
 
         <div className="stage-frame">
@@ -412,13 +412,27 @@ export default function Game() {
                 const frame = Math.floor((elapsed - plant.fireStartedAt!) / 100) % definition.fireFrames.length;
                 return <img className="fire-zone" key={plant.uid} src={definition.fireFrames[frame]} alt="" style={{left: `${(plant.col + .5) / COLS * 100 + 1.47}%`, top: `${(plant.row + .5) / ROWS * 100 + 4.625}%`, width: `${definition.attackRange / COLS * 100}%`}} />;
               })}</div>
+              <div className="missile-effects" aria-hidden="true">{missiles.map((missile) => {
+                const flight = Math.min(1, (elapsed - missile.launchedAt) / (missile.impactAt - missile.launchedAt));
+                const x = missile.fromX + (missile.targetCol - missile.fromX) * flight;
+                const y = missile.row + .15 + flight * .5 - Math.sin(flight * Math.PI) * .35;
+                const impacted = elapsed >= missile.impactAt;
+                return <div key={missile.uid}>
+                  <span className={`missile-target ${impacted ? 'impacted' : ''}`} style={{ left: `${missile.targetCol / COLS * 100}%`, top: `${missile.row / ROWS * 100}%`, width: `${100 / COLS}%`, height: `${100 / ROWS}%` }} />
+                  {impacted ? <span className="missile-explosion" style={{ left: `${(missile.targetCol + .5) / COLS * 100}%`, top: `${(missile.row + .65) / ROWS * 100}%` }}>50</span>
+                    : <img className="enemy-missile" src="/assets/horse-missile-zombie/missile.webp" alt="" style={{ left: `${(x + .5) / COLS * 100}%`, top: `${y / ROWS * 100}%` }} />}
+                </div>;
+              })}</div>
               {zombies.map((zombie) => {
                 const definition = ZOMBIES[zombie.type];
                 const attackFrame = zombie.biting && definition.attackImage && Math.floor(elapsed / 260) % 2 === 0;
                 const slowed = zombie.slowUntil > elapsed;
-                return <div className={`zombie entity ${zombie.type} ${zombie.biting ? 'biting' : ''} ${slowed ? 'slowed' : ''} ${zombie.hitUntil > elapsed ? 'hit' : ''}`} key={zombie.uid} style={{ left: `${(zombie.x + .5) / COLS * 100}%`, top: `${(zombie.row + 1) / ROWS * 100}%` }}>
-                  <img src={attackFrame ? definition.attackImage : definition.image} alt={`${definition.name}${slowed ? ' (slowed)' : ''}`} draggable={false} />
+                const recharging = Boolean(definition.missiles && (zombie.missileReadyAt ?? 0) > elapsed);
+                const launching = recharging && elapsed < zombie.missileReadyAt! - definition.missiles!.rechargeMs + definition.missiles!.flightMs;
+                return <div className={`zombie entity ${zombie.type} ${zombie.biting ? 'biting' : ''} ${slowed ? 'slowed' : ''} ${launching ? 'launching' : ''} ${zombie.hitUntil > elapsed ? 'hit' : ''}`} key={zombie.uid} style={{ left: `${(zombie.x + .5) / COLS * 100}%`, top: `${(zombie.row + 1) / ROWS * 100}%` }}>
+                  <img src={recharging ? definition.rechargeImage : attackFrame ? definition.attackImage : definition.image} alt={`${definition.name}${recharging ? ' (recharging)' : ''}${slowed ? ' (slowed)' : ''}`} draggable={false} />
                   <span className="health enemy-health"><i style={{ width: `${Math.max(0, zombie.health / zombie.maxHealth * 100)}%` }} /></span>
+                  {recharging && <span className="missile-reload" aria-label={`Missiles recharge in ${Math.ceil((zombie.missileReadyAt! - elapsed) / 1000)} seconds`}>↻ {Math.ceil((zombie.missileReadyAt! - elapsed) / 1000)}s</span>}
                   {slowed && <span className="slow-status">SLOW</span>}
                 </div>;
               })}

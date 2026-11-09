@@ -1,5 +1,5 @@
 export type PlantId = 'sprout-scout' | 'stone-shooter' | 'stone-plant' | 'watermelon-plant' | 'mooshoom' | 'fireshroom';
-export type ZombieId = 'pothead-shambler' | 'log-zombie';
+export type ZombieId = 'pothead-shambler' | 'log-zombie' | 'horse-missile-zombie' | 'zombie-horse';
 export type ProjectileKind = 'pea' | 'rock' | 'watermelon' | 'purple-pea';
 
 export type SlowEffect = {
@@ -50,6 +50,8 @@ export type ZombieDefinition = {
   reward: number;
   image: string;
   attackImage?: string;
+  rechargeImage?: string;
+  missiles?: { damage: number; count: number; rechargeMs: number; flightMs: number };
 };
 
 export type PlantEntity = {
@@ -76,6 +78,17 @@ export type ZombieEntity = {
   hitUntil: number;
   slowUntil: number;
   slowMultiplier: number;
+  missileReadyAt?: number;
+};
+
+export type MissileEntity = {
+  uid: number;
+  row: number;
+  fromX: number;
+  targetCol: number;
+  damage: number;
+  launchedAt: number;
+  impactAt: number;
 };
 
 export type ProjectileEntity = {
