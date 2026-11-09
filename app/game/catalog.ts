@@ -86,6 +86,13 @@ export const PLANTS: Record<PlantId, PlantDefinition> = {
 };
 
 export const ZOMBIES: Record<ZombieId, ZombieDefinition> = {
+  't-rex-zombie': {
+    id: 't-rex-zombie', name: 'T rex Zombie',
+    health: 250 * 10, speed: 0.105 * 2, damagePerSecond: 17 * 3, reward: 20,
+    image: '/assets/t-rex-zombie/ready.webp',
+    laneBall: { releaseHealthRatio: 0.25, speed: 8,
+      releasedImage: '/assets/t-rex-zombie/released.webp', ballImage: '/assets/t-rex-zombie/ball.webp' },
+  },
   'horse-missile-zombie': {
     id: 'horse-missile-zombie', name: 'Horse Missile Zombie',
     health: 600, speed: 0.105 * 1.5, damagePerSecond: 17, reward: 0,

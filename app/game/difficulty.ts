@@ -25,7 +25,8 @@ export function getWaveCounts(difficulty: Difficulty, wave: number) {
   const regular = base.regular * multiplier;
   const log = base.log * multiplier;
   const horseMissile = base.horseMissile * multiplier;
-  return { regular, log, horseMissile, total: regular + log + horseMissile };
+  const tRex = difficulty === 'easy' ? 0 : (wave - 1) * multiplier / 2;
+  return { regular, log, horseMissile, tRex, total: regular + log + horseMissile + tRex };
 }
 
 export function getTotalZombies(difficulty: Difficulty) {
@@ -47,6 +48,13 @@ export function getSpawnGroup(difficulty: Difficulty, wave: number, spawned: num
   const counts = getWaveCounts(difficulty, wave);
   if (spawned >= counts.total) return null;
 
+  const ordinaryTotal = counts.regular + counts.log + counts.horseMissile;
+  // The exact boss quota is a final group, after every existing encounter.
+  // It is intentionally separate from the 1x/2x/4x ordinary spawn groups.
+  if (spawned >= ordinaryTotal) {
+    return { type: 't-rex-zombie' as ZombieId, count: counts.total - spawned, healthBonus: 0 };
+  }
+
   const multiplier = DIFFICULTIES[difficulty].multiplier;
   const baseIndex = Math.floor(spawned / multiplier);
   const base = BASE_WAVES[wave - 1];
@@ -63,7 +71,7 @@ export function getSpawnGroup(difficulty: Difficulty, wave: number, spawned: num
 
   return {
     type,
-    count: Math.min(multiplier, counts.total - spawned),
+    count: Math.min(multiplier, ordinaryTotal - spawned),
     healthBonus: type === 'horse-missile-zombie' ? 0 : Math.floor(originalIndex / 4) * 30 * (type === 'log-zombie' ? 2 : 1),
   };
 }

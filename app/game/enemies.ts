@@ -1,4 +1,4 @@
-import type { MissileEntity, PlantEntity, ZombieDefinition, ZombieEntity, ZombieId } from './types';
+import type { MissileEntity, PlantEntity, RollingBallEntity, ZombieDefinition, ZombieEntity, ZombieId } from './types';
 
 export const MISSILE_IMPACT_MS = 400;
 
@@ -32,6 +32,29 @@ export function applyMissileImpacts(plants: readonly PlantEntity[], missiles: re
     .filter((missile) => missile.row === plant.row && missile.targetCol === plant.col)
     .reduce((damage, missile) => damage + missile.damage, 0) }))
     .filter((plant) => plant.health > 0);
+}
+
+// Call after ALL damage/devours and before resolving deaths. A lethal hit can
+// skip the threshold, but must never skip the boss's one-time last attack.
+export function releaseLaneBalls(zombies: readonly ZombieEntity[], definitions: Record<ZombieId, ZombieDefinition>, elapsed: number, columns: number) {
+  const balls: Omit<RollingBallEntity, 'uid'>[] = [];
+  const updated = zombies.map((zombie) => {
+    const ability = definitions[zombie.type].laneBall;
+    if (!ability || zombie.ballReleased || zombie.health > zombie.maxHealth * ability.releaseHealthRatio) return zombie;
+    // Enter from the right edge so the whole lane is swept, even when the boss
+    // dies near the house or the player has planted behind it.
+    balls.push({ row: zombie.row, x: columns + 0.5, speed: ability.speed, releasedAt: elapsed, image: ability.ballImage });
+    return { ...zombie, ballReleased: true };
+  });
+  return { zombies: updated, balls };
+}
+
+export function advanceRollingBalls(balls: readonly RollingBallEntity[], plants: readonly PlantEntity[], tickMs: number) {
+  const moved = balls.map((ball) => ({ ...ball, x: ball.x - ball.speed * tickMs / 1000 }));
+  // Swept collision tests the entire path, so fast movement cannot skip a tile.
+  const survivors = plants.filter((plant) => !moved.some((ball, index) => ball.row === plant.row
+    && plant.col + 0.5 >= ball.x - 0.4 && plant.col + 0.5 <= balls[index].x + 0.4));
+  return { balls: moved.filter((ball) => ball.x >= -0.5), plants: survivors };
 }
 
 // Rider + horse are one wave encounter. All defeat paths (shots, fire, devour)
