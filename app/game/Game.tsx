@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PLANTS, ZOMBIES } from './catalog';
 import { advanceZombie, applySlow, canProjectileHit, canShootAtZombie, getFirePhase, hasZombieReachedHouse, isProjectileInRange, stepFirePlant } from './combat';
-import { DIFFICULTIES, DIFFICULTY_OPTIONS, TOTAL_WAVES, getKillsBeforeWave, getSpawnDelayMs, getSpawnGroup, getTotalZombies, getWaveCounts } from './difficulty';
+import { DIFFICULTIES, DIFFICULTY_OPTIONS, TOTAL_WAVES, assignSpawnRows, getKillsBeforeWave, getSpawnDelayMs, getSpawnGroup, getSpawnMembers, getTotalZombies, getWaveCounts } from './difficulty';
+import { applyTntImpacts, getBossImage, landImps, stepBossAbilities, TNT_BLAST_MS } from './boss';
 import { advanceRollingBalls, applyMissileImpacts, launchMissiles, MISSILE_IMPACT_MS, releaseLaneBalls, resolveZombieDefeats } from './enemies';
 import type { Difficulty } from './difficulty';
-import type { MissileEntity, PlantEntity, PlantId, ProjectileEntity, RollingBallEntity, SlowEffect, SunEntity, ZombieEntity } from './types';
+import type { ImpFlightEntity, MissileEntity, PlantEntity, PlantId, ProjectileEntity, RollingBallEntity, SlowEffect, SunEntity, TntEntity, ZombieEntity } from './types';
 
 const ROWS = 5;
 const COLS = 9;
@@ -23,6 +24,10 @@ export default function Game() {
   const [projectiles, setProjectiles] = useState<ProjectileEntity[]>([]);
   const [missiles, setMissiles] = useState<MissileEntity[]>([]);
   const [rollingBalls, setRollingBalls] = useState<RollingBallEntity[]>([]);
+  const [tnt, setTnt] = useState<TntEntity[]>([]);
+  const [impFlights, setImpFlights] = useState<ImpFlightEntity[]>([]);
+  const [reinforcements, setReinforcements] = useState(0);
+  const [waveReinforcements, setWaveReinforcements] = useState(0);
   const [suns, setSuns] = useState<SunEntity[]>([]);
   const [selectedPlant, setSelectedPlant] = useState<PlantId | null>('sprout-scout');
   const [status, setStatus] = useState<GameStatus>('playing');
@@ -36,9 +41,10 @@ export default function Game() {
   const lastSpawnAt = useRef(0);
   const lastSunAt = useRef(0);
   const lastSimulatedAt = useRef(-1);
-  const zombiesThisWave = getWaveCounts(difficulty, currentWave).total;
-  const totalZombies = getTotalZombies(difficulty);
-  const killsBeforeThisWave = getKillsBeforeWave(difficulty, currentWave);
+  const scriptedZombiesThisWave = getWaveCounts(difficulty, currentWave).total;
+  const zombiesThisWave = scriptedZombiesThisWave + waveReinforcements;
+  const totalZombies = getTotalZombies(difficulty) + reinforcements;
+  const killsBeforeThisWave = getKillsBeforeWave(difficulty, currentWave) + reinforcements - waveReinforcements;
   const waveKills = Math.max(0, kills - killsBeforeThisWave);
 
   useEffect(() => {
@@ -57,11 +63,16 @@ export default function Game() {
       const image = new window.Image();
       image.src = src;
     });
+    const loadout = ZOMBIES['boss-zombie'].bossLoadout!;
+    [ZOMBIES['boss-zombie'].image, loadout.tntEmptyImage, loadout.impsEmptyImage, loadout.emptyImage, loadout.tntImage, ZOMBIES['imp-zombie'].image].forEach((src) => {
+      const image = new window.Image(); image.src = src;
+    });
   }, []);
 
   const restart = useCallback(() => {
     setEnergy(150); setPlants([]); setZombies([]); setProjectiles([]); setMissiles([]); setSuns([]);
     setRollingBalls([]);
+    setTnt([]); setImpFlights([]); setReinforcements(0); setWaveReinforcements(0);
     setStatus('playing'); setCurrentWave(1); setKills(0); setSpawned(0); setElapsed(0);
     setSelectedPlant('sprout-scout');
     setNotice('Pick a plant, then choose a tile.');
@@ -155,22 +166,21 @@ export default function Game() {
     }
 
     let newcomers: ZombieEntity[] = [];
-    if (spawned < zombiesThisWave && elapsed - lastSpawnAt.current >= getSpawnDelayMs(difficulty, spawned)) {
+    if (spawned < scriptedZombiesThisWave && elapsed - lastSpawnAt.current >= getSpawnDelayMs(difficulty, spawned)) {
       const group = getSpawnGroup(difficulty, currentWave, spawned)!;
-      const definition = ZOMBIES[group.type];
-      const maxHealth = definition.health + group.healthBonus;
-      const availableRows = Array.from({ length: ROWS }, (_, row) => row);
-      newcomers = Array.from({ length: group.count }, () => {
-        // Keep members of one group in different lanes so they remain readable.
-        const [row] = availableRows.splice(Math.floor(Math.random() * availableRows.length), 1);
+      const members = getSpawnMembers(group);
+      const lanes = assignSpawnRows(members, ROWS);
+      newcomers = members.map((type, index) => {
+        const definition = ZOMBIES[type];
+        const maxHealth = definition.health + group.healthBonus;
         return {
-          uid: serial.current++, type: definition.id, row, x: 9.25,
+          uid: serial.current++, type: definition.id, row: lanes[index], x: 9.25,
           health: maxHealth, maxHealth, biting: false, hitUntil: 0, slowUntil: 0, slowMultiplier: 1,
         };
       });
       setSpawned((value) => value + group.count);
       lastSpawnAt.current = elapsed;
-      setNotice(group.type === 't-rex-zombie' ? `BOSS: ${group.count} T rex Zombie${group.count > 1 ? 's' : ''} close wave ${currentWave}! Beware the metal ball.` : group.type === 'horse-missile-zombie' ? `Wave ${currentWave}: Horse Missile Zombie incoming! Watch the next three tiles.` : group.type === 'log-zombie' ? `Wave ${currentWave}: a Log Zombie entered the yard!` : currentWave === TOTAL_WAVES && spawned / DIFFICULTIES[difficulty].multiplier > 7 ? 'Final wave incoming!' : `Wave ${currentWave}: a shambler entered the yard.`);
+      setNotice(members.includes('boss-zombie') ? 'FINAL BOSSES: Boss Zombie and T rex Zombies have arrived!' : group.type === 't-rex-zombie' ? `BOSS: ${group.count} T rex Zombie${group.count > 1 ? 's' : ''} close wave ${currentWave}! Beware the metal ball.` : group.type === 'horse-missile-zombie' ? `Wave ${currentWave}: Horse Missile Zombie incoming! Watch the next three tiles.` : group.type === 'log-zombie' ? `Wave ${currentWave}: a Log Zombie entered the yard!` : currentWave === TOTAL_WAVES && spawned / DIFFICULTIES[difficulty].multiplier > 7 ? 'Final wave incoming!' : `Wave ${currentWave}: a shambler entered the yard.`);
     }
 
     if (elapsed - lastSunAt.current >= 5600) {
@@ -181,13 +191,27 @@ export default function Game() {
     }
 
     const activeMissiles = missiles.filter((missile) => elapsed < missile.impactAt + MISSILE_IMPACT_MS);
-    const armedZombies = zombies.map((zombie) => {
+    const activeTnt = tnt.filter((bomb) => elapsed < bomb.impactAt + TNT_BLAST_MS);
+    const landed = landImps(impFlights, ZOMBIES['imp-zombie'], elapsed);
+    const activeFlights = [...landed.flights];
+    let newImpCount = 0;
+    const armedZombies = [...zombies, ...landed.zombies].map((zombie) => {
+      const abilities = stepBossAbilities(zombie, ZOMBIES[zombie.type], plants, elapsed, COLS, ROWS);
+      activeTnt.push(...abilities.tnt.map((bomb) => ({ ...bomb, uid: serial.current++ })));
+      activeFlights.push(...abilities.flights.map((flight) => ({ ...flight, uid: serial.current++ })));
+      newImpCount += abilities.flights.length;
+      zombie = abilities.zombie;
       const launch = launchMissiles(zombie, ZOMBIES[zombie.type], elapsed, COLS);
       if (!launch) return zombie;
       activeMissiles.push(...launch.missiles.map((missile) => ({ ...missile, uid: serial.current++ })));
       return launch.zombie;
     });
-    const rolling = advanceRollingBalls(rollingBalls, applyMissileImpacts(plants, activeMissiles, elapsed, TICK_MS), TICK_MS);
+    if (newImpCount) {
+      setReinforcements((value) => value + newImpCount);
+      setWaveReinforcements((value) => value + newImpCount);
+      setNotice('Boss Zombie launched three Imps into the lanes!');
+    }
+    const rolling = advanceRollingBalls(rollingBalls, applyTntImpacts(applyMissileImpacts(plants, activeMissiles, elapsed, TICK_MS), activeTnt, elapsed, TICK_MS), TICK_MS);
     const intactPlants = rolling.plants;
     const claimedZombies = new Set<number>();
     const devours = new Map<number, number>();
@@ -290,6 +314,7 @@ export default function Game() {
     setPlants((current) => [...damaged, ...current.filter((plant) => !tickPlantIds.has(plant.uid))]);
     setZombies([...outcome.zombies, ...newcomers]);
     setMissiles(activeMissiles);
+    setTnt(activeTnt); setImpFlights(activeFlights);
     setRollingBalls([...rolling.balls, ...released.balls.map((ball) => ({ ...ball, uid: serial.current++ }))]);
     setProjectiles(moved.filter((shot) => shot.x < 9.5 && isProjectileInRange(shot) && !consumed.has(shot.uid)));
   // Elapsed time is the authoritative clock. Every tick renders with the latest
@@ -298,13 +323,14 @@ export default function Game() {
   }, [elapsed, status]);
 
   useEffect(() => {
-    if (status === 'playing' && spawned >= zombiesThisWave && waveKills >= zombiesThisWave && zombies.length === 0 && rollingBalls.length === 0 && missiles.every((missile) => missile.impactAt <= elapsed)) {
+    if (status === 'playing' && spawned >= scriptedZombiesThisWave && waveKills >= zombiesThisWave && zombies.length === 0 && rollingBalls.length === 0 && impFlights.length === 0 && tnt.every((bomb) => bomb.impactAt <= elapsed) && missiles.every((missile) => missile.impactAt <= elapsed)) {
       if (currentWave < TOTAL_WAVES) {
         setCurrentWave((wave) => wave + 1);
         setSpawned(0);
         setProjectiles([]);
         setMissiles([]);
         setRollingBalls([]);
+        setTnt([]); setImpFlights([]); setWaveReinforcements(0);
         lastSpawnAt.current = elapsed + 2800;
         setNotice(`Wave ${currentWave + 1} begins in 4 seconds. Get ready!`);
       } else {
@@ -312,7 +338,7 @@ export default function Game() {
         setNotice('All three waves cleared. The backyard is safe—for now.');
       }
     }
-  }, [currentWave, elapsed, missiles, rollingBalls.length, spawned, status, waveKills, zombies.length, zombiesThisWave]);
+  }, [currentWave, elapsed, impFlights.length, missiles, rollingBalls.length, scriptedZombiesThisWave, spawned, status, tnt, waveKills, zombies.length, zombiesThisWave]);
 
   const placePlant = (row: number, col: number) => {
     if (status !== 'playing' || !selectedPlant) return;
@@ -333,7 +359,7 @@ export default function Game() {
     setNotice(`+${sun.value} sun collected.`);
   };
 
-  const progress = Math.min(100, ((waveKills + spawned * .25) / (zombiesThisWave * 1.25)) * 100);
+  const progress = Math.min(100, ((waveKills + (spawned + waveReinforcements) * .25) / (zombiesThisWave * 1.25)) * 100);
   const nextSpawn = Math.max(0, Math.ceil((lastSpawnAt.current + getSpawnDelayMs(difficulty, spawned) - elapsed) / 1000));
 
   return (
@@ -394,7 +420,7 @@ export default function Game() {
             <span><b>Fireshroom</b><small>2-tile fire · 3s burn · 5s rest</small></span>
             <em>{PLANTS.fireshroom.cost}</em>
           </button>
-          <div className="field-notes"><b>FIELD NOTES</b><p>Hard and Crazy end waves 2 and 3 with T rex bosses. At low health, their metal balls clear an entire lane!</p></div>
+          <div className="field-notes"><b>FIELD NOTES</b><p>Boss Zombie joins the final wave in Hard and Crazy. Watch for TNT blasts and Imp reinforcements!</p></div>
         </aside>
 
         <div className="stage-frame">
@@ -439,6 +465,22 @@ export default function Game() {
                     : <img className="enemy-missile" src="/assets/horse-missile-zombie/missile.webp" alt="" style={{ left: `${(x + .5) / COLS * 100}%`, top: `${y / ROWS * 100}%` }} />}
                 </div>;
               })}</div>
+              <div className="boss-effects" aria-hidden="true">{tnt.map((bomb) => {
+                const flight = Math.min(1, (elapsed - bomb.launchedAt) / (bomb.impactAt - bomb.launchedAt));
+                const target = bomb.targetCols.reduce((sum, col) => sum + col, 0) / bomb.targetCols.length;
+                const y = bomb.row + .3 + flight * .35 - Math.sin(flight * Math.PI) * .9;
+                const impacted = elapsed >= bomb.impactAt;
+                return <div key={bomb.uid}>
+                  {bomb.targetCols.map((col) => <span key={col} className={`tnt-zone ${impacted ? 'exploding' : ''}`} style={{ left: `${col / COLS * 100}%`, top: `${bomb.row / ROWS * 100}%`, width: `${100 / COLS}%`, height: `${100 / ROWS}%` }} />)}
+                  {impacted ? <span className="tnt-blast" style={{ left: `${(target + .5) / COLS * 100}%`, top: `${(bomb.row + .6) / ROWS * 100}%` }}>BOOM!</span>
+                    : bomb.targetCols.map((col, index) => <img key={col} className="flying-tnt" src={ZOMBIES['boss-zombie'].bossLoadout!.tntImage} alt="" style={{ left: `${(bomb.fromX + (col - bomb.fromX) * flight + .5) / COLS * 100}%`, top: `${(y - Math.sin(flight * Math.PI) * index * .2) / ROWS * 100}%`, transform: `translate(-50%,-50%) rotate(${-flight * 180}deg)` }} />)}
+                </div>;
+              })}{impFlights.map((flight) => {
+                const progress = Math.min(1, (elapsed - flight.launchedAt) / (flight.landAt - flight.launchedAt));
+                const x = flight.fromX + (flight.x - flight.fromX) * progress;
+                const y = flight.fromRow + .4 + (flight.row - flight.fromRow + .35) * progress - Math.sin(progress * Math.PI) * 1.2;
+                return <img key={flight.uid} className="flying-imp" src={ZOMBIES['imp-zombie'].image} alt="" style={{ left: `${(x + .5) / COLS * 100}%`, top: `${y / ROWS * 100}%` }} />;
+              })}</div>
               <div className="rolling-ball-effects" aria-hidden="true">{rollingBalls.map((ball) => <div key={ball.uid}>
                 <span className="ball-lane-warning" style={{ top: `${ball.row / ROWS * 100}%`, height: `${100 / ROWS}%` }} />
                 <div className="rolling-metal-ball" style={{ left: `${ball.x / COLS * 100}%`, top: `${(ball.row + 1) / ROWS * 100}%` }}>
@@ -451,11 +493,12 @@ export default function Game() {
                 const slowed = zombie.slowUntil > elapsed;
                 const recharging = Boolean(definition.missiles && (zombie.missileReadyAt ?? 0) > elapsed);
                 const launching = recharging && elapsed < zombie.missileReadyAt! - definition.missiles!.rechargeMs + definition.missiles!.flightMs;
-                const image = definition.laneBall && zombie.ballReleased ? definition.laneBall.releasedImage : recharging ? definition.rechargeImage : attackFrame ? definition.attackImage : definition.image;
-                return <div className={`zombie entity ${zombie.type} ${zombie.biting ? 'biting' : ''} ${slowed ? 'slowed' : ''} ${launching ? 'launching' : ''} ${zombie.hitUntil > elapsed ? 'hit' : ''}`} key={zombie.uid} style={{ left: `${(zombie.x + .5) / COLS * 100}%`, top: `${(zombie.row + 1) / ROWS * 100}%` }}>
+                const image = definition.bossLoadout ? getBossImage(zombie, definition, elapsed) : definition.laneBall && zombie.ballReleased ? definition.laneBall.releasedImage : recharging ? definition.rechargeImage : attackFrame ? definition.attackImage : definition.image;
+                return <div className={`zombie entity ${zombie.type} ${zombie.biting ? 'biting' : ''} ${slowed ? 'slowed' : ''} ${launching ? 'launching' : ''} ${(zombie.bossPulseUntil ?? 0) > elapsed ? 'boss-launching' : ''} ${zombie.hitUntil > elapsed ? 'hit' : ''}`} key={zombie.uid} style={{ left: `${(zombie.x + .5) / COLS * 100}%`, top: `${(zombie.row + 1) / ROWS * 100}%` }}>
                   <img src={image} alt={`${definition.name}${zombie.ballReleased ? ' (ball released)' : ''}${recharging ? ' (recharging)' : ''}${slowed ? ' (slowed)' : ''}`} draggable={false} />
                   <span className="health enemy-health"><i style={{ width: `${Math.max(0, zombie.health / zombie.maxHealth * 100)}%` }} /></span>
-                  {definition.laneBall && <span className="boss-badge">BOSS · {Math.ceil(zombie.health)} HP</span>}
+                  {(definition.laneBall || definition.bossLoadout) && <span className="boss-badge">BOSS · {Math.ceil(zombie.health)} HP</span>}
+                  {definition.bossLoadout && <span className="boss-reloads"><b>TNT {elapsed < (zombie.tntReadyAt ?? 0) ? `${Math.ceil((zombie.tntReadyAt! - elapsed) / 1000)}s` : 'READY'}</b><b>IMP {elapsed < (zombie.impReadyAt ?? 0) ? `${Math.ceil((zombie.impReadyAt! - elapsed) / 1000)}s` : 'READY'}</b></span>}
                   {recharging && <span className="missile-reload" aria-label={`Missiles recharge in ${Math.ceil((zombie.missileReadyAt! - elapsed) / 1000)} seconds`}>↻ {Math.ceil((zombie.missileReadyAt! - elapsed) / 1000)}s</span>}
                   {slowed && <span className="slow-status">SLOW</span>}
                 </div>;
@@ -474,7 +517,7 @@ export default function Game() {
           <div className="stage-footer" role="status" aria-live="polite">
             <span><kbd>1–6</kbd> Pick plant</span><span><kbd>Click</kbd> Place</span><span><kbd>Space</kbd> Pause</span>
             <p>{notice}</p>
-            <strong>{spawned < zombiesThisWave ? `Wave ${currentWave} · next zombie ${nextSpawn}s` : currentWave === TOTAL_WAVES ? 'Final wave deployed' : `Wave ${currentWave} fully deployed`}</strong>
+            <strong>{spawned < scriptedZombiesThisWave ? `Wave ${currentWave} · next zombie ${nextSpawn}s` : currentWave === TOTAL_WAVES ? 'Final wave deployed' : `Wave ${currentWave} fully deployed`}</strong>
           </div>
         </div>
       </section>

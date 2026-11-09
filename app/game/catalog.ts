@@ -86,6 +86,20 @@ export const PLANTS: Record<PlantId, PlantDefinition> = {
 };
 
 export const ZOMBIES: Record<ZombieId, ZombieDefinition> = {
+  'boss-zombie': {
+    id: 'boss-zombie', name: 'Boss Zombie', health: 2000,
+    speed: 0.105 * 0.9, damagePerSecond: 17, reward: 20,
+    image: '/assets/boss-zombie/ready.webp',
+    bossLoadout: { tntRechargeMs: 20000, impRechargeMs: 45000, flightMs: 900,
+      tntEmptyImage: '/assets/boss-zombie/tnt-empty.webp',
+      impsEmptyImage: '/assets/boss-zombie/imps-empty.webp',
+      emptyImage: '/assets/boss-zombie/recharging.webp', tntImage: '/assets/boss-zombie/tnt.webp' },
+  },
+  'imp-zombie': {
+    id: 'imp-zombie', name: 'Imp Zombie', health: 250,
+    speed: 0.105, damagePerSecond: 17, reward: 20,
+    image: '/assets/boss-zombie/imp.webp',
+  },
   't-rex-zombie': {
     id: 't-rex-zombie', name: 'T rex Zombie',
     health: 250 * 10, speed: 0.105 * 2, damagePerSecond: 17 * 3, reward: 20,

@@ -26,7 +26,24 @@ export function getWaveCounts(difficulty: Difficulty, wave: number) {
   const log = base.log * multiplier;
   const horseMissile = base.horseMissile * multiplier;
   const tRex = difficulty === 'easy' ? 0 : (wave - 1) * multiplier / 2;
-  return { regular, log, horseMissile, tRex, total: regular + log + horseMissile + tRex };
+  const boss = difficulty !== 'easy' && wave === 3 ? 1 : 0;
+  return { regular, log, horseMissile, tRex, boss, total: regular + log + horseMissile + tRex + boss };
+}
+
+export type SpawnGroup = { type: ZombieId; count: number; healthBonus: number; members?: ZombieId[] };
+
+export function getSpawnMembers(group: SpawnGroup): ZombieId[] {
+  return group.members ?? Array.from({ length: group.count }, () => group.type);
+}
+
+export function assignSpawnRows(members: readonly ZombieId[], rows: number, random = Math.random) {
+  const available = Array.from({ length: rows }, (_, row) => row);
+  // Reserve an interior lane first, even though Boss Zombie is last in the
+  // mixed final group. This guarantees three distinct lanes for its Imp volley.
+  const bossRow = members.includes('boss-zombie') ? 1 + Math.floor(random() * (rows - 2)) : -1;
+  if (bossRow >= 0) available.splice(available.indexOf(bossRow), 1);
+  return members.map((type) => type === 'boss-zombie' ? bossRow
+    : available.splice(Math.floor(random() * available.length), 1)[0]);
 }
 
 export function getTotalZombies(difficulty: Difficulty) {
@@ -44,7 +61,7 @@ export function getSpawnDelayMs(difficulty: Difficulty, spawned: number) {
 
 // Each Easy encounter becomes a group in the other modes. This increases only
 // enemy numbers while preserving the original encounter timing and health curve.
-export function getSpawnGroup(difficulty: Difficulty, wave: number, spawned: number) {
+export function getSpawnGroup(difficulty: Difficulty, wave: number, spawned: number): SpawnGroup | null {
   const counts = getWaveCounts(difficulty, wave);
   if (spawned >= counts.total) return null;
 
@@ -52,7 +69,12 @@ export function getSpawnGroup(difficulty: Difficulty, wave: number, spawned: num
   // The exact boss quota is a final group, after every existing encounter.
   // It is intentionally separate from the 1x/2x/4x ordinary spawn groups.
   if (spawned >= ordinaryTotal) {
-    return { type: 't-rex-zombie' as ZombieId, count: counts.total - spawned, healthBonus: 0 };
+    const finalMembers: ZombieId[] = [
+      ...Array.from({ length: counts.tRex }, (): ZombieId => 't-rex-zombie'),
+      ...Array.from({ length: counts.boss }, (): ZombieId => 'boss-zombie'),
+    ];
+    const members = finalMembers.slice(spawned - ordinaryTotal);
+    return { type: members[0], count: members.length, healthBonus: 0, members };
   }
 
   const multiplier = DIFFICULTIES[difficulty].multiplier;

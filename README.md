@@ -22,13 +22,13 @@ The game runs entirely in the browser. Music may begin after the first click or 
 
 Use the mode bar at the top of the game to choose a difficulty. Each option has a plant expression icon: relaxed for Easy, tense for Hard, and sweating for Crazy. Switching modes starts a fresh game; restarting after a win or loss keeps the selected mode.
 
-| Mode | Wave 1 (regular / log / missile / rex) | Wave 2 (regular / log / missile / rex) | Wave 3 (regular / log / missile / rex) | Encounters |
+| Mode | Wave 1 (regular / log / missile / rex / boss) | Wave 2 (regular / log / missile / rex / boss) | Wave 3 (regular / log / missile / rex / boss) | Scripted encounters |
 | --- | --- | --- | --- | ---: |
-| Easy · 1× | 12 / 0 / 0 / 0 | 12 / 5 / 1 / 0 | 12 / 7 / 2 / 0 | 51 |
-| Hard · 2× | 24 / 0 / 0 / 0 | 24 / 10 / 2 / 1 | 24 / 14 / 4 / 2 | 105 |
-| Crazy · 4× | 48 / 0 / 0 / 0 | 48 / 20 / 4 / 2 | 48 / 28 / 8 / 4 | 210 |
+| Easy · 1× | 12 / 0 / 0 / 0 / 0 | 12 / 5 / 1 / 0 / 0 | 12 / 7 / 2 / 0 / 0 | 51 |
+| Hard · 2× | 24 / 0 / 0 / 0 / 0 | 24 / 10 / 2 / 1 / 0 | 24 / 14 / 4 / 2 / 1 | 106 |
+| Crazy · 4× | 48 / 0 / 0 / 0 / 0 | 48 / 20 / 4 / 2 / 0 | 48 / 28 / 8 / 4 / 1 | 211 |
 
-Hard and Crazy expand each ordinary Easy encounter into groups of two or four across different lanes, preserving the existing encounter timing and health progression. They also add the exact T rex boss quotas shown above, always as the final spawn group. Bosses in that group occupy different lanes. Easy has no T rex bosses. Plant stats, zombie stats, and sun rules stay the same across modes.
+Hard and Crazy expand each ordinary Easy encounter into groups of two or four across different lanes, preserving the existing encounter timing and health progression. Their final spawn group contains the exact T rex quotas above and, in wave 3, exactly one Boss Zombie. Bosses occupy different lanes, with Boss Zombie reserved an interior lane so it can launch Imps above, below, and into its own lane. Easy has neither boss type. Summoned Imps add to the live wave/total counters and must also be defeated.
 
 ### Plants
 
@@ -50,12 +50,21 @@ Hard and Crazy expand each ordinary Easy encounter into groups of two or four ac
 | Horse Missile Zombie | 600 | 150% | Fires three missiles at the three tiles ahead in its lane, each dealing 50 damage. Recharges for 15 seconds while walking and biting normally. |
 | Zombie Horse | 250 | 100% | Survives the Horse Missile Zombie's defeat and continues walking and biting with normal-zombie stats. No missiles. |
 | T rex Zombie | 2,500 | 200% | Hard/Crazy wave-ending boss. Has 10× normal base health and 3× normal contact damage (51 HP/second). Releases a lane-clearing metal ball once at low health. |
+| Boss Zombie | 2,000 | 90% | Appears once at the end of Hard/Crazy wave 3 with the T rex bosses. Normal melee damage; throws TNT and launches three Imps. Visually twice the normal zombie size, above all other zombies. |
+| Imp Zombie | 250 | 100% | Summoned reinforcement with normal-zombie health, speed, melee damage, and rewards, but smaller Imp artwork. |
 
 In Easy mode, each wave contains 12 Pothead Shamblers. Wave 2 adds 5 Log Zombies and 1 Horse Missile Zombie; wave 3 adds 7 Log Zombies and 2 Horse Missile Zombies. Hard and Crazy multiply every quota by 2 and 4. A Horse Missile Zombie and its surviving horse count as one encounter: the wave only credits a defeat after the horse is defeated, including when Stone Plant swallows the zombie. Regular/log enemies retain their existing health progression; Horse Missile Zombies always start at 600 HP and surviving horses at 250 HP.
 
 Missiles launch only after the zombie enters the lawn. Each locks onto a separate tile ahead, travels for 650 ms, then deals 50 damage to the plant on that tile. Empty tiles still absorb their missile; there is no damage to adjacent rows. Near the house edge, targets outside the board are omitted. The empty launcher sprite and countdown show its 15-second recharge. Missiles already in flight remain active if their launcher is defeated. Pausing freezes flight, damage, and recharge timers.
 
 T rex Zombies arrive after all ordinary enemies have spawned: Hard has 1 in wave 2 and 2 in wave 3; Crazy has 2 and 4. Each releases its metal ball at 25% health (625 HP), or immediately before a lethal hit or Stone Plant swallow. The ball sweeps the full lane from the right edge toward the house at 8 tiles/second, destroying every plant it passes regardless of plant health. It leaves neighboring lanes intact, continues after its boss dies, and cannot itself cause a house breach. Wave progression waits until every released ball has left the lawn. Pausing freezes the sweep; restarting clears it.
+
+Boss Zombie has two independent abilities, initially ready once it enters the lawn:
+
+- **TNT:** when either of the two tiles directly ahead contains a plant, throws a two-bundle volley at those locked tiles. After a 900 ms flight, the blast destroys every plant in those two tiles regardless of health, leaving other tiles/lanes intact. Reloads for 20 seconds; waits for a target if ready but the tiles are empty.
+- **Imps:** launches exactly three Imps, one into the lane above, one into its own lane, and one below. They land one tile ahead after 900 ms (clamped to the first tile near the house), then walk and attack independently. Reloads for 45 seconds. Airborne Imps and TNT remain active after the boss dies; all surviving/airborne Imps must be cleared before victory.
+
+Boss sprites show all four combinations of loaded/empty hands and backpack, with separate TNT/Imp countdowns. Pause freezes both abilities, flight, and landing times; restart clears summons and effects. The display order is **Boss Zombie > T rex Zombie > other zombies**. Boss Zombie is 2× the normal sprite dimensions; T rex keeps its enlarged 1.8× artwork. These visual sizes do not change combat range or lane collision rules.
 
 ## Controls
 
@@ -83,6 +92,7 @@ app/
 │   ├── combat.ts      # Target ranges, projectile limits, and temporary slows
 │   ├── difficulty.ts  # Difficulty multipliers, wave quotas, and spawn groups
 │   ├── enemies.ts     # Missiles, boss lane sweeps, and zombie-to-horse transitions
+│   ├── boss.ts        # TNT volleys, Imp deployment/landing, and reload sprites
 │   └── types.ts       # Definition and entity contracts
 ├── globals.css        # Board layout, responsive UI, and character animations
 ├── layout.tsx         # Page metadata and document shell
@@ -128,7 +138,7 @@ npx tsc --noEmit
 npm run lint
 ```
 
-The tests verify exact quotas and final boss ordering, health progression, range/slow behavior, Fireshroom timing, missile targeting/damage/recharge, zombie-to-horse transitions, and one-time boss ball release with full-lane collision coverage.
+The tests verify exact quotas and mixed final boss groups, interior spawn lanes, health progression, range/slow behavior, Fireshroom timing, missile targeting/recharge, horse transitions, T rex lane sweeps, TNT target tiles, independent reloads, and Imp landing/stats/survival after the boss dies.
 
 ## Add custom characters
 

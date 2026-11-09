@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ZOMBIES } from '../app/game/catalog.ts';
-import { DIFFICULTIES, TOTAL_WAVES, getKillsBeforeWave, getSpawnDelayMs, getSpawnGroup, getTotalZombies, getWaveCounts } from '../app/game/difficulty.ts';
+import { DIFFICULTIES, TOTAL_WAVES, assignSpawnRows, getKillsBeforeWave, getSpawnDelayMs, getSpawnGroup, getSpawnMembers, getTotalZombies, getWaveCounts } from '../app/game/difficulty.ts';
 
 function spawnWave(mode, wave) {
   const groups = [];
@@ -21,13 +21,14 @@ test('all modes preserve regular/log quotas and add exact Horse Missile Zombie q
   };
   for (const [mode, waves] of Object.entries(expected)) {
     for (let wave = 1; wave <= TOTAL_WAVES; wave++) {
-      const counts = { 'pothead-shambler': 0, 'log-zombie': 0, 'horse-missile-zombie': 0, 't-rex-zombie': 0 };
-      for (const group of spawnWave(mode, wave)) counts[group.type] += group.count;
+      const counts = { 'pothead-shambler': 0, 'log-zombie': 0, 'horse-missile-zombie': 0, 't-rex-zombie': 0, 'boss-zombie': 0 };
+      for (const group of spawnWave(mode, wave)) for (const type of getSpawnMembers(group)) counts[type]++;
       const [regular, log, horseMissile] = waves[wave - 1];
       const tRex = mode === 'easy' ? 0 : (wave - 1) * (mode === 'hard' ? 1 : 2);
-      assert.deepEqual(counts, { 'pothead-shambler': regular, 'log-zombie': log, 'horse-missile-zombie': horseMissile, 't-rex-zombie': tRex });
-      assert.deepEqual(getWaveCounts(mode, wave), { regular, log, horseMissile, tRex, total: regular + log + horseMissile + tRex });
-      assert.equal(getSpawnGroup(mode, wave, regular + log + horseMissile + tRex), null);
+      const boss = mode !== 'easy' && wave === 3 ? 1 : 0;
+      assert.deepEqual(counts, { 'pothead-shambler': regular, 'log-zombie': log, 'horse-missile-zombie': horseMissile, 't-rex-zombie': tRex, 'boss-zombie': boss });
+      assert.deepEqual(getWaveCounts(mode, wave), { regular, log, horseMissile, tRex, boss, total: regular + log + horseMissile + tRex + boss });
+      assert.equal(getSpawnGroup(mode, wave, regular + log + horseMissile + tRex + boss), null);
     }
   }
 });
@@ -68,7 +69,7 @@ test('existing zombies retain doubled health; new Horse Missile Zombies always h
 });
 
 test('wave transitions and final victory use the selected mode totals', () => {
-  for (const [mode, total] of Object.entries({ easy: 51, hard: 105, crazy: 210 })) {
+  for (const [mode, total] of Object.entries({ easy: 51, hard: 106, crazy: 211 })) {
     let cleared = 0;
     for (let wave = 1; wave <= TOTAL_WAVES; wave++) {
       assert.equal(getKillsBeforeWave(mode, wave), cleared);
@@ -85,12 +86,33 @@ test('T rex bosses are exactly the final group, with no Easy or wave-1 bosses', 
       const groups = spawnWave(mode, wave);
       const bosses = groups.filter((group) => group.type === 't-rex-zombie');
       const expected = mode === 'easy' || wave === 1 ? 0 : (wave - 1) * (mode === 'hard' ? 1 : 2);
-      assert.equal(bosses.reduce((total, group) => total + group.count, 0), expected);
+      assert.equal(bosses.reduce((total, group) => total + getSpawnMembers(group).filter((type) => type === 't-rex-zombie').length, 0), expected);
       if (expected) {
         assert.equal(bosses.length, 1);
         assert.equal(groups.at(-1).type, 't-rex-zombie');
         assert.equal(groups.at(-1).healthBonus, 0);
         assert.ok(groups.slice(0, -1).every((group) => group.type !== 't-rex-zombie'));
+      }
+    }
+  }
+});
+
+test('Boss Zombie appears exactly once in Hard/Crazy wave 3, alongside all T rex bosses', () => {
+  for (const mode of Object.keys(DIFFICULTIES)) {
+    for (let wave = 1; wave <= TOTAL_WAVES; wave++) {
+      const groups = spawnWave(mode, wave);
+      const members = groups.flatMap(getSpawnMembers);
+      const expected = mode !== 'easy' && wave === 3 ? 1 : 0;
+      assert.equal(members.filter((type) => type === 'boss-zombie').length, expected);
+      if (expected) {
+        const final = getSpawnMembers(groups.at(-1));
+        assert.equal(final.at(-1), 'boss-zombie');
+        assert.equal(final.filter((type) => type === 't-rex-zombie').length, mode === 'hard' ? 2 : 4);
+        for (const random of [0, 0.2, 0.5, 0.99]) {
+          const rows = assignSpawnRows(final, 5, () => random);
+          assert.equal(new Set(rows).size, final.length);
+          assert.ok(rows.at(-1) >= 1 && rows.at(-1) <= 3);
+        }
       }
     }
   }
