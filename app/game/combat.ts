@@ -1,4 +1,11 @@
-import type { FirePlantDefinition, PlantEntity, ProjectileEntity, ProjectilePlantDefinition, SlowEffect, ZombieEntity } from './types';
+import type { FirePlantDefinition, PlantEntity, ProjectileEntity, ProjectilePlantDefinition, SlowEffect, ZombieDefinition, ZombieEntity } from './types';
+
+export function getDevourDamage(zombie: Pick<ZombieEntity, 'health' | 'maxHealth'>, definition: Pick<ZombieDefinition, 'devourDamageRatio'>) {
+  const remaining = Math.max(0, zombie.health);
+  // Boss bites use maximum HP, so damage does not shrink with each bite.
+  return definition.devourDamageRatio === undefined ? remaining
+    : Math.min(remaining, zombie.maxHealth * definition.devourDamageRatio);
+}
 
 export function canShootAtZombie(
   plant: Pick<PlantEntity, 'row' | 'col'>,

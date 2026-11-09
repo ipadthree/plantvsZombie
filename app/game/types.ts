@@ -51,6 +51,7 @@ export type ZombieDefinition = {
   image: string;
   attackImage?: string;
   rechargeImage?: string;
+  devourDamageRatio?: number;
   missiles?: { damage: number; count: number; rechargeMs: number; flightMs: number };
   laneBall?: { releaseHealthRatio: number; speed: number; releasedImage: string; ballImage: string };
   bossLoadout?: {

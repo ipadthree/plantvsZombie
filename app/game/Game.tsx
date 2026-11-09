@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PLANTS, ZOMBIES } from './catalog';
-import { advanceZombie, applySlow, canProjectileHit, canShootAtZombie, getFirePhase, hasZombieReachedHouse, isProjectileInRange, stepFirePlant } from './combat';
+import { advanceZombie, applySlow, canProjectileHit, canShootAtZombie, getDevourDamage, getFirePhase, hasZombieReachedHouse, isProjectileInRange, stepFirePlant } from './combat';
 import { DIFFICULTIES, DIFFICULTY_OPTIONS, TOTAL_WAVES, assignSpawnRows, getKillsBeforeWave, getSpawnDelayMs, getSpawnGroup, getSpawnMembers, getTotalZombies, getWaveCounts } from './difficulty';
 import { applyTntImpacts, getBossImage, landImps, stepBossAbilities, TNT_BLAST_MS } from './boss';
 import { advanceRollingBalls, applyMissileImpacts, launchMissiles, MISSILE_IMPACT_MS, releaseLaneBalls, resolveZombieDefeats } from './enemies';
@@ -215,6 +215,8 @@ export default function Game() {
     const intactPlants = rolling.plants;
     const claimedZombies = new Set<number>();
     const devours = new Map<number, number>();
+    const devourHits = new Map<number, number>();
+    let bitBoss = false;
     intactPlants.forEach((plant) => {
       const definition = PLANTS[plant.type];
       if (definition.attackMode !== 'devour' || plant.digestUntil > elapsed) return;
@@ -226,12 +228,17 @@ export default function Game() {
           && Math.abs(zombie.x - (plant.col + 0.5)) <= definition.devourRange)
         .sort((a, b) => Math.abs(a.x - (plant.col + 0.5)) - Math.abs(b.x - (plant.col + 0.5)))[0];
       if (target) {
-        claimedZombies.add(target.uid);
+        const previousDamage = devourHits.get(target.uid) ?? 0;
+        const remaining = target.health - previousDamage;
+        const damage = getDevourDamage({ ...target, health: remaining }, ZOMBIES[target.type]);
+        devourHits.set(target.uid, previousDamage + damage);
+        if (damage >= remaining) claimedZombies.add(target.uid);
+        if (ZOMBIES[target.type].devourDamageRatio !== undefined) bitBoss = true;
         devours.set(plant.uid, target.uid);
       }
     });
-    if (claimedZombies.size) {
-      setNotice('Stone Plant swallowed a shambler. Digesting for 5 seconds…');
+    if (devours.size) {
+      setNotice(bitBoss ? 'Stone Plant bit a boss. Digesting for 5 seconds…' : 'Stone Plant swallowed a shambler. Digesting for 5 seconds…');
     }
 
     const fireUpdates = new Map<number, PlantEntity>();
@@ -282,7 +289,8 @@ export default function Game() {
     });
     const moved = [...projectiles, ...newShots].map((shot) => ({ ...shot, x: shot.x + shot.speed * TICK_MS / 1000 }));
     const consumed = new Set<number>();
-    const hits = new Map<number, number>(fireHits);
+    const hits = new Map<number, number>(devourHits);
+    fireHits.forEach((damage, uid) => hits.set(uid, (hits.get(uid) ?? 0) + damage));
     const slows = new Map<number, SlowEffect>();
     moved.forEach((shot) => {
       const target = armedZombies

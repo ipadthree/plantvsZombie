@@ -34,7 +34,7 @@ export const PLANTS: Record<PlantId, PlantDefinition> = {
   'stone-plant': {
     id: 'stone-plant',
     name: 'Stone Plant',
-    description: 'Swallows a nearby shambler, then digests for five seconds.',
+    description: 'Swallows normal zombies or bites bosses, then digests for five seconds.',
     cost: 150,
     health: 125,
     attackMode: 'devour',
@@ -88,6 +88,7 @@ export const PLANTS: Record<PlantId, PlantDefinition> = {
 export const ZOMBIES: Record<ZombieId, ZombieDefinition> = {
   'boss-zombie': {
     id: 'boss-zombie', name: 'Boss Zombie', health: 2000,
+    devourDamageRatio: 0.3,
     speed: 0.105 * 0.9, damagePerSecond: 17, reward: 20,
     image: '/assets/boss-zombie/ready.webp',
     bossLoadout: { tntRechargeMs: 20000, impRechargeMs: 45000, flightMs: 900,
@@ -102,6 +103,7 @@ export const ZOMBIES: Record<ZombieId, ZombieDefinition> = {
   },
   't-rex-zombie': {
     id: 't-rex-zombie', name: 'T rex Zombie',
+    devourDamageRatio: 0.5,
     health: 250 * 10, speed: 0.105 * 2, damagePerSecond: 17 * 3, reward: 20,
     image: '/assets/t-rex-zombie/ready.webp',
     laneBall: { releaseHealthRatio: 0.25, speed: 8,

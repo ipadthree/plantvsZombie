@@ -36,7 +36,7 @@ Hard and Crazy expand each ordinary Easy encounter into groups of two or four ac
 | --- | ---: | ---: | --- |
 | Sprout Scout | 100 | 100 | Fires one fast pea for 25 damage. |
 | Stone Shooter | 125 | 150 | Fires two rocks per volley, each dealing 22 damage. |
-| Stone Plant | 150 | 125 | Swallows the nearest zombie in range, then digests for 5 seconds. |
+| Stone Plant | 150 | 125 | Swallows normal zombies; bites Boss Zombie for 30% of max HP (600) and T rex for 50% (1,250). Digests for 5 seconds after every bite. |
 | Watermelon Plant | 200 | 250 | Fires two watermelon slices, each dealing 37.5 damage (1.5× pea damage). |
 | Mooshoom | 0 | 25 | Fires purple peas for 6.25 damage (¼ pea damage) at zombies less than 5 tiles ahead. Hits slow movement by 50% for 3 seconds; repeat hits refresh the effect. |
 | Fireshroom | 200 | 100 | Burns every zombie less than two tiles ahead for 3 seconds (75 total damage per target, matching a watermelon volley), then rests for 5 seconds with a tired face and question mark. |
@@ -57,7 +57,9 @@ In Easy mode, each wave contains 12 Pothead Shamblers. Wave 2 adds 5 Log Zombies
 
 Missiles launch only after the zombie enters the lawn. Each locks onto a separate tile ahead, travels for 650 ms, then deals 50 damage to the plant on that tile. Empty tiles still absorb their missile; there is no damage to adjacent rows. Near the house edge, targets outside the board are omitted. The empty launcher sprite and countdown show its 15-second recharge. Missiles already in flight remain active if their launcher is defeated. Pausing freezes flight, damage, and recharge timers.
 
-T rex Zombies arrive after all ordinary enemies have spawned: Hard has 1 in wave 2 and 2 in wave 3; Crazy has 2 and 4. Each releases its metal ball at 25% health (625 HP), or immediately before a lethal hit or Stone Plant swallow. The ball sweeps the full lane from the right edge toward the house at 8 tiles/second, destroying every plant it passes regardless of plant health. It leaves neighboring lanes intact, continues after its boss dies, and cannot itself cause a house breach. Wave progression waits until every released ball has left the lawn. Pausing freezes the sweep; restarting clears it.
+T rex Zombies arrive after all ordinary enemies have spawned: Hard has 1 in wave 2 and 2 in wave 3; Crazy has 2 and 4. Each releases its metal ball at 25% health (625 HP), or immediately before a lethal hit, including a finishing Stone Plant bite. The ball sweeps the full lane from the right edge toward the house at 8 tiles/second, destroying every plant it passes regardless of plant health. It leaves neighboring lanes intact, continues after its boss dies, and cannot itself cause a house breach. Wave progression waits until every released ball has left the lawn. Pausing freezes the sweep; restarting clears it.
+
+Stone Plant's boss damage uses **maximum health**, not remaining health. A full-health Boss Zombie requires four bites (600/600/600/200); a full-health T rex requires two (1,250 each), assuming no other damage. Each bite starts the same five-second digestion. Surviving bosses continue moving, attacking, and using abilities, and do not award a kill/reward until actually defeated. Low-health bosses can be finished by a bite. Multiple Stone Plants can contribute their own bites. The first bite on a full-health T rex leaves 50% HP, so it does not release its ball yet; damage taking it to 25% or below, or a lethal bite, still releases the ball once.
 
 Boss Zombie has two independent abilities, initially ready once it enters the lawn:
 
