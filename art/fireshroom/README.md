@@ -1,6 +1,6 @@
 # Fireshroom artwork
 
-Artwork prepared from the supplied `fireshroom.gif`, matching Backyard Brigade's existing painted cartoon style. This is an artwork-only pack; Fireshroom is not registered as a playable plant yet.
+Artwork prepared from the supplied `fireshroom.gif`, matching Backyard Brigade's existing painted cartoon style. Fireshroom is playable using shortcut `6`: 200 sun, 100 health, 75 area damage per target over 3 seconds, followed by 5 seconds of recharge.
 
 ![Ready, firing, and tired recharge poses](../../public/assets/fireshroom/poses.png)
 
@@ -40,9 +40,9 @@ The preview contains a 3-second animated fire phase followed by a 5-second tired
 | Health | 100 |
 | Sun cost | 200 |
 | Attack area | Two tiles directly ahead, in the same lane |
-| Damage | Same as Watermelon Plant; resolve per-hit/volley cadence when implementing the sustained attack |
+| Damage | 75 per target over 3 seconds, matching Watermelon Plant's complete two-slice volley |
 | Fire duration | 3000 ms |
 | Recharge after fire | 5000 ms; cannot attack |
 | Recharge appearance | Tired face with a question mark above the cap |
 
-Generation used the built-in image tool. [Exact generation/edit prompts](PROMPTS.md) are retained for revisions. The PNG files preserve the generated artwork; WebP variants and the GIF are mechanical exports/assembly of that artwork. No gameplay code or live deployment was changed for this artwork phase.
+Generation used the built-in image tool. [Exact generation/edit prompts](PROMPTS.md) are retained for revisions. The PNG files preserve the generated artwork; WebP variants and the GIF are mechanical exports/assembly of that artwork. The game uses the optimized WebP state images and flame frames.

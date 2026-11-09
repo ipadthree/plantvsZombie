@@ -1,14 +1,15 @@
 {
   "version": 1,
   "plantId": "fireshroom",
-  "status": "artwork-ready",
+  "status": "playable",
   "gameplay": {
     "health": 100,
     "sunCost": 200,
     "rangeTiles": 2,
     "fireDurationMs": 3000,
     "rechargeMs": 5000,
-    "damageMatches": "watermelon-plant"
+    "damageMatches": "watermelon-plant",
+    "burstDamagePerTarget": 75
   },
   "character": {
     "masterSize": [1254, 1254],

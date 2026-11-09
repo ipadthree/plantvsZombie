@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PLANTS, ZOMBIES } from './catalog';
-import { advanceZombie, applySlow, canProjectileHit, canShootAtZombie, hasZombieReachedHouse, isProjectileInRange } from './combat';
+import { advanceZombie, applySlow, canProjectileHit, canShootAtZombie, getFirePhase, hasZombieReachedHouse, isProjectileInRange, stepFirePlant } from './combat';
 import { DIFFICULTIES, DIFFICULTY_OPTIONS, TOTAL_WAVES, getKillsBeforeWave, getSpawnDelayMs, getSpawnGroup, getTotalZombies, getWaveCounts } from './difficulty';
 import type { Difficulty } from './difficulty';
 import type { PlantEntity, PlantId, ProjectileEntity, SlowEffect, SunEntity, ZombieEntity } from './types';
@@ -36,6 +36,15 @@ export default function Game() {
   const totalZombies = getTotalZombies(difficulty);
   const killsBeforeThisWave = getKillsBeforeWave(difficulty, currentWave);
   const waveKills = Math.max(0, kills - killsBeforeThisWave);
+
+  useEffect(() => {
+    const definition = PLANTS.fireshroom;
+    if (definition.attackMode !== 'fire') return;
+    [definition.firingImage, definition.rechargeImage, ...definition.fireFrames].forEach((src) => {
+      const image = new window.Image();
+      image.src = src;
+    });
+  }, []);
 
   const restart = useCallback(() => {
     setEnergy(150); setPlants([]); setZombies([]); setProjectiles([]); setSuns([]);
@@ -96,6 +105,7 @@ export default function Game() {
       if (event.key === '3') setSelectedPlant('stone-plant');
       if (event.key === '4') setSelectedPlant('watermelon-plant');
       if (event.key === '5') setSelectedPlant('mooshoom');
+      if (event.key === '6') setSelectedPlant('fireshroom');
       if (event.key === 'Escape') setSelectedPlant(null);
       const isControl = event.target instanceof HTMLElement && event.target.closest('button, a, input, select, textarea');
       if (event.key === ' ' && !isControl) { event.preventDefault(); togglePause(); }
@@ -179,6 +189,18 @@ export default function Game() {
       setNotice('Stone Plant swallowed a shambler. Digesting for 5 seconds…');
     }
 
+    const fireUpdates = new Map<number, PlantEntity>();
+    const fireHits = new Map<number, number>();
+    plants.forEach((plant) => {
+      const definition = PLANTS[plant.type];
+      if (definition.attackMode !== 'fire') return;
+      const attacker = zombies.find((zombie) => zombie.row === plant.row && Math.abs(zombie.x - (plant.col + 0.5)) < 0.52);
+      if (attacker && plant.health <= ZOMBIES[attacker.type].damagePerSecond * TICK_MS / 1000) return;
+      const update = stepFirePlant(plant, definition, zombies.filter((zombie) => !claimedZombies.has(zombie.uid)), elapsed, TICK_MS, COLS);
+      fireUpdates.set(plant.uid, update.plant);
+      update.hits.forEach((hit) => fireHits.set(hit.uid, (fireHits.get(hit.uid) ?? 0) + hit.damage));
+    });
+
     setPlants((currentPlants) => {
       const damaged = currentPlants.map((plant) => {
         const attacker = zombies.find((zombie) => zombie.row === plant.row && Math.abs(zombie.x - (plant.col + 0.5)) < 0.52);
@@ -189,7 +211,8 @@ export default function Game() {
             return { ...nextPlant, pulseUntil: elapsed + 430, digestUntil: elapsed + definition.digestMs };
           }
         }
-        return nextPlant;
+        const fireUpdate = fireUpdates.get(plant.uid);
+        return fireUpdate ? { ...fireUpdate, health: nextPlant.health } : nextPlant;
       }).filter((plant) => plant.health > 0);
 
       damaged.forEach((plant) => {
@@ -222,7 +245,7 @@ export default function Game() {
     setProjectiles((currentShots) => {
       const moved = currentShots.map((shot) => ({ ...shot, x: shot.x + shot.speed * TICK_MS / 1000 }));
       const consumed = new Set<number>();
-      const hits = new Map<number, number>();
+      const hits = new Map<number, number>(fireHits);
       const slows = new Map<number, SlowEffect>();
       moved.forEach((shot) => {
         const target = zombies
@@ -350,7 +373,12 @@ export default function Game() {
             <span><b>{PLANTS.mooshoom.name}</b><small>Purple peas · slow · &lt;5 tiles</small></span>
             <em>{PLANTS.mooshoom.cost}</em>
           </button>
-          <div className="field-notes"><b>FIELD NOTES</b><p>Mooshoom costs 0 sun. Its short-range purple peas slow zombies by 50% for 3 seconds.</p></div>
+          <button className={`seed-card ${selectedPlant === 'fireshroom' ? 'selected' : ''} ${energy < PLANTS.fireshroom.cost ? 'unaffordable' : ''}`} onClick={() => setSelectedPlant((value) => value === 'fireshroom' ? null : 'fireshroom')} aria-pressed={selectedPlant === 'fireshroom'} title={PLANTS.fireshroom.description}>
+            <img src="/assets/fireshroom/icon.webp" alt="" />
+            <span><b>Fireshroom</b><small>2-tile fire · 3s burn · 5s rest</small></span>
+            <em>{PLANTS.fireshroom.cost}</em>
+          </button>
+          <div className="field-notes"><b>FIELD NOTES</b><p>Fireshroom burns all zombies in the next two tiles for 3 seconds, then rests for 5 seconds.</p></div>
         </aside>
 
         <div className="stage-frame">
@@ -369,13 +397,21 @@ export default function Game() {
                 const definition = PLANTS[plant.type];
                 const devouring = definition.attackMode === 'devour' && plant.pulseUntil > elapsed;
                 const digesting = definition.attackMode === 'devour' && plant.digestUntil > elapsed;
-                const image = definition.attackMode === 'devour' && digesting && !devouring ? definition.digestImage : definition.image;
+                const firePhase = definition.attackMode === 'fire' ? getFirePhase(plant, definition, elapsed) : null;
+                const image = definition.attackMode === 'fire' ? firePhase === 'firing' ? definition.firingImage : firePhase === 'recharging' ? definition.rechargeImage : definition.image : definition.attackMode === 'devour' && digesting && !devouring ? definition.digestImage : definition.image;
                 return <div className={`plant entity ${definition.attackMode === 'projectile' && plant.pulseUntil > elapsed ? 'firing' : ''} ${devouring ? 'devouring' : ''} ${digesting && !devouring ? 'digesting' : ''}`} key={plant.uid} style={{ left: `${(plant.col + .5) / COLS * 100}%`, top: `${(plant.row + .5) / ROWS * 100}%` }}>
-                  <img src={image} alt={definition.name} draggable={false} />
+                  <img src={image} alt={`${definition.name}${firePhase === 'firing' ? ' (firing)' : firePhase === 'recharging' ? ' (recharging)' : ''}`} draggable={false} />
                   {plant.health < definition.health && <span className="health"><i style={{ width: `${plant.health / definition.health * 100}%` }} /></span>}
                   {digesting && !devouring && <span className="digest-timer">{Math.max(1, Math.ceil((plant.digestUntil - elapsed) / 1000))}s</span>}
+                  {firePhase === 'recharging' && <span className="digest-timer">{Math.ceil((plant.rechargeUntil! - elapsed) / 1000)}s</span>}
                 </div>;
               })}
+              <div className="fire-effects" aria-hidden="true">{plants.map((plant) => {
+                const definition = PLANTS[plant.type];
+                if (definition.attackMode !== 'fire' || getFirePhase(plant, definition, elapsed) !== 'firing') return null;
+                const frame = Math.floor((elapsed - plant.fireStartedAt!) / 100) % definition.fireFrames.length;
+                return <img className="fire-zone" key={plant.uid} src={definition.fireFrames[frame]} alt="" style={{left: `${(plant.col + .5) / COLS * 100 + 1.47}%`, top: `${(plant.row + .5) / ROWS * 100 + 4.625}%`, width: `${definition.attackRange / COLS * 100}%`}} />;
+              })}</div>
               {zombies.map((zombie) => {
                 const definition = ZOMBIES[zombie.type];
                 const attackFrame = zombie.biting && definition.attackImage && Math.floor(elapsed / 260) % 2 === 0;
@@ -398,7 +434,7 @@ export default function Game() {
             </div>
           </div>
           <div className="stage-footer" role="status" aria-live="polite">
-            <span><kbd>1–5</kbd> Pick plant</span><span><kbd>Click</kbd> Place</span><span><kbd>Space</kbd> Pause</span>
+            <span><kbd>1–6</kbd> Pick plant</span><span><kbd>Click</kbd> Place</span><span><kbd>Space</kbd> Pause</span>
             <p>{notice}</p>
             <strong>{spawned < zombiesThisWave ? `Wave ${currentWave} · next zombie ${nextSpawn}s` : currentWave === TOTAL_WAVES ? 'Final wave deployed' : `Wave ${currentWave} fully deployed`}</strong>
           </div>

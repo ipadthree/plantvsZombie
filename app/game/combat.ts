@@ -1,8 +1,8 @@
-import type { PlantEntity, ProjectileEntity, ProjectilePlantDefinition, SlowEffect, ZombieEntity } from './types';
+import type { FirePlantDefinition, PlantEntity, ProjectileEntity, ProjectilePlantDefinition, SlowEffect, ZombieEntity } from './types';
 
 export function canShootAtZombie(
   plant: Pick<PlantEntity, 'row' | 'col'>,
-  definition: ProjectilePlantDefinition,
+  definition: Pick<ProjectilePlantDefinition, 'attackRange'>,
   zombie: Pick<ZombieEntity, 'row' | 'x'>,
   columns: number,
 ) {
@@ -49,4 +49,21 @@ export function advanceZombie(zombie: ZombieEntity, blocked: boolean, baseSpeed:
 
 export function hasZombieReachedHouse(zombies: readonly ZombieEntity[]) {
   return zombies.some((zombie) => zombie.health > 0 && zombie.x <= 0.08);
+}
+
+export function getFirePhase(plant: PlantEntity, definition: FirePlantDefinition, elapsed: number) {
+  if (plant.fireStartedAt !== undefined && elapsed < plant.fireStartedAt + definition.fireDurationMs) return 'firing';
+  if (elapsed < (plant.rechargeUntil ?? 0)) return 'recharging';
+  return 'ready';
+}
+
+export function stepFirePlant(plant: PlantEntity, definition: FirePlantDefinition, zombies: readonly ZombieEntity[], elapsed: number, tickMs: number, columns: number) {
+  const targets = zombies.filter((zombie) => zombie.health > 0 && canShootAtZombie(plant, definition, zombie, columns));
+  let next = plant;
+  if (getFirePhase(plant, definition, elapsed) === 'ready' && targets.length) {
+    next = { ...plant, fireStartedAt: elapsed, rechargeUntil: elapsed + definition.fireDurationMs + definition.rechargeMs };
+  }
+  const activeMs = getFirePhase(next, definition, elapsed) === 'firing'
+    ? Math.min(tickMs, next.fireStartedAt! + definition.fireDurationMs - elapsed) : 0;
+  return { plant: next, hits: activeMs > 0 ? targets.map((zombie) => ({ uid: zombie.uid, damage: definition.burstDamage * activeMs / definition.fireDurationMs })) : [] };
 }

@@ -73,6 +73,16 @@ export const PLANTS: Record<PlantId, PlantDefinition> = {
     slowEffect: { movementMultiplier: 0.5, durationMs: 3000 },
     image: '/assets/mooshoom-no-leaves.png',
   },
+  'fireshroom': {
+    id: 'fireshroom', name: 'Fireshroom',
+    description: 'Burns every zombie within two tiles for 3 seconds, then recharges for 5 seconds.',
+    cost: 200, health: 100, attackMode: 'fire', attackRange: 2,
+    burstDamage: 75, fireDurationMs: 3000, rechargeMs: 5000,
+    image: '/assets/fireshroom/idle.webp',
+    firingImage: '/assets/fireshroom/firing.webp',
+    rechargeImage: '/assets/fireshroom/recharging.webp',
+    fireFrames: ['/assets/fireshroom/fire-1.webp', '/assets/fireshroom/fire-2.webp', '/assets/fireshroom/fire-3.webp'],
+  },
 };
 
 export const ZOMBIES: Record<ZombieId, ZombieDefinition> = {

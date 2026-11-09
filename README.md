@@ -39,6 +39,7 @@ Difficulty changes zombie quantity. Hard and Crazy expand each Easy encounter in
 | Stone Plant | 150 | 125 | Swallows the nearest zombie in range, then digests for 5 seconds. |
 | Watermelon Plant | 200 | 250 | Fires two watermelon slices, each dealing 37.5 damage (1.5× pea damage). |
 | Mooshoom | 0 | 25 | Fires purple peas for 6.25 damage (¼ pea damage) at zombies less than 5 tiles ahead. Hits slow movement by 50% for 3 seconds; repeat hits refresh the effect. |
+| Fireshroom | 200 | 100 | Burns every zombie less than two tiles ahead for 3 seconds (75 total damage per target, matching a watermelon volley), then rests for 5 seconds with a tired face and question mark. |
 
 ### Zombies and waves
 
@@ -53,7 +54,7 @@ In Easy mode, each wave contains 12 Pothead Shamblers. Wave 2 adds 5 Log Zombies
 
 | Input | Action |
 | --- | --- |
-| `1`–`5` | Select a plant card (Mooshoom is `5`) |
+| `1`–`6` | Select a plant card (Mooshoom is `5`, Fireshroom is `6`) |
 | Click a plant card | Select or deselect that plant |
 | Click a lawn tile | Place the selected plant |
 | Click a sun token | Collect sun |

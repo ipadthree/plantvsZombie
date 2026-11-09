@@ -1,4 +1,4 @@
-export type PlantId = 'sprout-scout' | 'stone-shooter' | 'stone-plant' | 'watermelon-plant' | 'mooshoom';
+export type PlantId = 'sprout-scout' | 'stone-shooter' | 'stone-plant' | 'watermelon-plant' | 'mooshoom' | 'fireshroom';
 export type ZombieId = 'pothead-shambler' | 'log-zombie';
 export type ProjectileKind = 'pea' | 'rock' | 'watermelon' | 'purple-pea';
 
@@ -34,7 +34,12 @@ export type DevourPlantDefinition = PlantDefinitionBase & {
   digestImage: string;
 };
 
-export type PlantDefinition = ProjectilePlantDefinition | DevourPlantDefinition;
+export type FirePlantDefinition = PlantDefinitionBase & {
+  attackMode: 'fire'; attackRange: number; burstDamage: number;
+  fireDurationMs: number; rechargeMs: number;
+  firingImage: string; rechargeImage: string; fireFrames: string[];
+};
+export type PlantDefinition = ProjectilePlantDefinition | DevourPlantDefinition | FirePlantDefinition;
 
 export type ZombieDefinition = {
   id: ZombieId;
@@ -56,6 +61,8 @@ export type PlantEntity = {
   lastShotAt: number;
   pulseUntil: number;
   digestUntil: number;
+  fireStartedAt?: number;
+  rechargeUntil?: number;
 };
 
 export type ZombieEntity = {
