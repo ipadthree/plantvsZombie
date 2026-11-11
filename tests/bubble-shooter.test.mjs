@@ -9,10 +9,11 @@ const plant = { row: 2, col: 1 };
 const zombie = { uid: 1, type: 'pothead-shambler', row: 2, x: 5, health: 250, maxHealth: 250,
   biting: false, hitUntil: 0, slowUntil: 0, slowMultiplier: 1 };
 
-test('Bubble Shooter costs 100, has 100 HP and pea damage, and fires one bubble at triple the Scout rate', () => {
+test('Bubble Shooter costs 100, has 100 HP and 25 DPS, and fires one bubble at triple the Scout rate', () => {
   assert.equal(bubble.cost, 100);
   assert.equal(bubble.health, 100);
-  assert.equal(bubble.projectileDamage, scout.projectileDamage);
+  assert.equal(bubble.projectileDamage, 125 / 12);
+  assert.ok(Math.abs(bubble.projectileDamage * bubble.projectilesPerVolley * 1000 / bubble.fireRateMs - 25) < 1e-9);
   assert.equal(bubble.projectileKind, 'bubble');
   assert.equal(bubble.projectilesPerVolley, 1);
   assert.equal(bubble.fireRateMs, scout.fireRateMs / 3);
@@ -36,7 +37,7 @@ test('ground shooters and fire ignore airborne enemies, while bubble shots respe
   for (const id of ['sprout-scout', 'stone-shooter', 'watermelon-plant', 'mooshoom', 'fireshroom']) {
     assert.equal(canShootAtZombie(plant, PLANTS[id], air, 9), false);
   }
-  const shot = { uid: 2, row: 2, x: 5, kind: 'bubble', damage: 25, speed: 1.85 };
+  const shot = { uid: 2, row: 2, x: 5, kind: 'bubble', damage: bubble.projectileDamage, speed: 1.85 };
   assert.equal(canProjectileHit(shot, zombie), true);
   assert.equal(canProjectileHit(shot, air), false);
   assert.equal(canProjectileHit({ ...shot, airborne: true }, air), true);
@@ -59,6 +60,7 @@ test('the fixed 50ms game clock gives exactly three bubble volleys per Scout vol
   const bubbles = countShots(bubble, true);
   assert.equal(peas.length, 6);
   assert.equal(bubbles.length, 18);
+  assert.ok(Math.abs(bubbles.length * bubble.projectileDamage / 7.5 - 25) < 1e-9);
   assert.ok(bubbles.every((time, index) => index === 0 || [400, 450].includes(time - bubbles[index - 1])));
 });
 

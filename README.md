@@ -40,7 +40,7 @@ Hard and Crazy expand each ordinary Easy encounter into groups of two or four ac
 | Watermelon Plant | 200 | 250 | Fires two watermelon slices, each dealing 37.5 damage (1.5× pea damage). |
 | Mooshoom | 0 | 25 | Fires purple peas for 6.25 damage (¼ pea damage) at zombies less than 5 tiles ahead. Hits slow movement by 50% for 3 seconds; repeat hits refresh the effect. |
 | Fireshroom | 200 | 100 | Burns every zombie less than two tiles ahead for 3 seconds (75 total damage per target, matching a watermelon volley), then rests for 5 seconds with a tired face and question mark. |
-| Bubble Shooter | 100 | 100 | Fires one 25-damage bubble per volley at 3× Sprout Scout's rate. Extends its top shooter for airborne targets. |
+| Bubble Shooter | 100 | 100 | Fires one bubble dealing 125/12 damage (≈10.42) at 3× Sprout Scout's rate, for 25 DPS. Extends its top shooter for airborne targets. |
 
 Bubble Shooter uses a 1250/3 ms fire period, averaging three volleys per Sprout Scout volley on the fixed 50 ms game clock without catch-up bursts after waiting. It prioritizes visible airborne targets in its lane, switching to the stretched top-shooter image and an airborne bubble trajectory, then returns to its normal form when no airborne target remains. Ground and airborne projectiles only collide with their matching target layer. Current waves contain ground enemies only; future enemy definitions can opt into the existing `airborne` flag. The approved artwork is preserved in `art/bubble-shooter/`, with runtime assets under `public/assets/bubble-shooter/`.
 

@@ -19,9 +19,9 @@ export const PLANTS: Record<PlantId, PlantDefinition> = {
   },
   'bubble-shooter': {
     id: 'bubble-shooter', name: 'Bubble Shooter',
-    description: 'Rapid bubbles deal pea damage. Extends its top shooter for airborne targets.',
+    description: 'Rapid bubbles deal 25 damage per second. Extends its top shooter for airborne targets.',
     cost: 100, health: 100, attackMode: 'projectile', fireRateMs: 1250 / 3,
-    projectileDamage: 25, projectileKind: 'bubble', projectilesPerVolley: 1, projectileSpeed: 1.85,
+    projectileDamage: 125 / 12, projectileKind: 'bubble', projectilesPerVolley: 1, projectileSpeed: 1.85,
     canHitAirborne: true, image: '/assets/bubble-shooter/normal.webp',
     airborneImage: '/assets/bubble-shooter/anti-air.webp',
   },
