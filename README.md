@@ -40,6 +40,9 @@ Hard and Crazy expand each ordinary Easy encounter into groups of two or four ac
 | Watermelon Plant | 200 | 250 | Fires two watermelon slices, each dealing 37.5 damage (1.5× pea damage). |
 | Mooshoom | 0 | 25 | Fires purple peas for 6.25 damage (¼ pea damage) at zombies less than 5 tiles ahead. Hits slow movement by 50% for 3 seconds; repeat hits refresh the effect. |
 | Fireshroom | 200 | 100 | Burns every zombie less than two tiles ahead for 3 seconds (75 total damage per target, matching a watermelon volley), then rests for 5 seconds with a tired face and question mark. |
+| Bubble Shooter | 100 | 100 | Fires one 25-damage bubble per volley at 3× Sprout Scout's rate. Extends its top shooter for airborne targets. |
+
+Bubble Shooter uses a 1250/3 ms fire period, averaging three volleys per Sprout Scout volley on the fixed 50 ms game clock without catch-up bursts after waiting. It prioritizes visible airborne targets in its lane, switching to the stretched top-shooter image and an airborne bubble trajectory, then returns to its normal form when no airborne target remains. Ground and airborne projectiles only collide with their matching target layer. Current waves contain ground enemies only; future enemy definitions can opt into the existing `airborne` flag. The approved artwork is preserved in `art/bubble-shooter/`, with runtime assets under `public/assets/bubble-shooter/`.
 
 ### Zombies and waves
 
@@ -72,7 +75,7 @@ Boss sprites show all four combinations of loaded/empty hands and backpack, with
 
 | Input | Action |
 | --- | --- |
-| `1`–`6` | Select a plant card (Mooshoom is `5`, Fireshroom is `6`) |
+| `1`–`7` | Select a plant card (Mooshoom is `5`, Fireshroom is `6`, Bubble Shooter is `7`) |
 | Click a plant card | Select or deselect that plant |
 | Click a lawn tile | Place the selected plant |
 | Click a sun token | Collect sun |
@@ -140,7 +143,7 @@ npx tsc --noEmit
 npm run lint
 ```
 
-The tests verify exact quotas and mixed final boss groups, interior spawn lanes, health progression, range/slow behavior, Fireshroom timing, missile targeting/recharge, horse transitions, T rex lane sweeps, TNT target tiles, independent reloads, and Imp landing/stats/survival after the boss dies.
+The tests verify exact quotas and mixed boss groups, health progression, plant ranges/effects, projectile layers, Bubble Shooter's exact triple fire cadence on the 50 ms clock, boss abilities, reinforcement landings, and Stone Plant's percentage-based boss bites.
 
 ## Add custom characters
 

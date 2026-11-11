@@ -5,6 +5,10 @@
 html, body { min-height:100%; }
 body { margin:0; color:var(--ink); background:#769951; font-family:Arial, Helvetica, sans-serif; }
 button { font:inherit; }
+.plant.bubble-shooter img{position:absolute;left:50%;bottom:0;width:auto;height:100%;max-width:none;object-fit:contain;transform:translateX(-36%)}
+.plant.bubble-shooter.aiming-airborne{z-index:5}
+.plant.bubble-shooter.aiming-airborne img{height:150%}
+.projectile.bubble{width:18px;height:18px;border:1px solid #c9f8ffff;border-radius:50%;background:radial-gradient(circle at 30% 25%,#fff 0 9%,#e7ffff99 10% 18%,transparent 27%),conic-gradient(from 30deg,#9eeaff66,#edb1f288,#c9f6b366,#98e9ff88,#9eeaff66);box-shadow:inset -2px -2px 3px #b77ddc88,inset 2px 1px 3px #eaffffbb,0 1px 4px #245e5b55}
 .fire-effects{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:5}.fire-zone{position:absolute;height:20%;object-fit:fill;transform:translate(-6%,-56%);pointer-events:none}
 .game-shell { min-height:100vh; padding:14px clamp(16px,1.5vw,32px) 28px; overflow-x:hidden; position:relative; background:linear-gradient(180deg,rgba(32,53,31,.22),rgba(32,53,31,.04) 48%,rgba(29,48,28,.18)),url('/assets/home-yard.png') center 46%/cover fixed no-repeat; }
 .topbar { height:72px; width:100%; margin:auto; display:flex; align-items:center; justify-content:space-between; color:var(--cream); filter:drop-shadow(0 3px 5px rgba(21,35,20,.34)); }

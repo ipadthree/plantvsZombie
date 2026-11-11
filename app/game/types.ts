@@ -1,6 +1,6 @@
-export type PlantId = 'sprout-scout' | 'stone-shooter' | 'stone-plant' | 'watermelon-plant' | 'mooshoom' | 'fireshroom';
+export type PlantId = 'sprout-scout' | 'stone-shooter' | 'stone-plant' | 'watermelon-plant' | 'mooshoom' | 'fireshroom' | 'bubble-shooter';
 export type ZombieId = 'pothead-shambler' | 'log-zombie' | 'horse-missile-zombie' | 'zombie-horse' | 't-rex-zombie' | 'boss-zombie' | 'imp-zombie';
-export type ProjectileKind = 'pea' | 'rock' | 'watermelon' | 'purple-pea';
+export type ProjectileKind = 'pea' | 'rock' | 'watermelon' | 'purple-pea' | 'bubble';
 
 export type SlowEffect = {
   movementMultiplier: number;
@@ -25,6 +25,8 @@ export type ProjectilePlantDefinition = PlantDefinitionBase & {
   projectileSpeed: number;
   attackRange?: number;
   slowEffect?: SlowEffect;
+  canHitAirborne?: boolean;
+  airborneImage?: string;
 };
 
 export type DevourPlantDefinition = PlantDefinitionBase & {
@@ -48,6 +50,7 @@ export type ZombieDefinition = {
   speed: number;
   damagePerSecond: number;
   reward: number;
+  airborne?: boolean;
   image: string;
   attackImage?: string;
   rechargeImage?: string;
@@ -71,6 +74,7 @@ export type PlantEntity = {
   digestUntil: number;
   fireStartedAt?: number;
   rechargeUntil?: number;
+  aimingAirborne?: boolean;
 };
 
 export type ZombieEntity = {
@@ -89,6 +93,7 @@ export type ZombieEntity = {
   tntReadyAt?: number;
   impReadyAt?: number;
   bossPulseUntil?: number;
+  airborne?: boolean;
 };
 
 export type TntEntity = {
@@ -129,6 +134,7 @@ export type ProjectileEntity = {
   speed: number;
   maxX?: number;
   slowEffect?: SlowEffect;
+  airborne?: boolean;
 };
 
 export type SunEntity = {

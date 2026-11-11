@@ -9,22 +9,36 @@ export function getDevourDamage(zombie: Pick<ZombieEntity, 'health' | 'maxHealth
 
 export function canShootAtZombie(
   plant: Pick<PlantEntity, 'row' | 'col'>,
-  definition: Pick<ProjectilePlantDefinition, 'attackRange'>,
-  zombie: Pick<ZombieEntity, 'row' | 'x'>,
+  definition: Pick<ProjectilePlantDefinition, 'attackRange' | 'canHitAirborne'>,
+  zombie: Pick<ZombieEntity, 'row' | 'x' | 'airborne'>,
   columns: number,
 ) {
   return zombie.row === plant.row
+    && (!zombie.airborne || definition.canHitAirborne === true)
     && zombie.x > plant.col + 0.15
     && zombie.x <= columns - 0.5
     && (definition.attackRange === undefined || zombie.x - plant.col < definition.attackRange);
+}
+
+export function getProjectileTarget(plant: Pick<PlantEntity, 'row' | 'col'>, definition: ProjectilePlantDefinition, zombies: readonly ZombieEntity[], columns: number) {
+  return zombies.filter((zombie) => zombie.health > 0 && canShootAtZombie(plant, definition, zombie, columns))
+    .sort((a, b) => (definition.canHitAirborne ? Number(Boolean(b.airborne)) - Number(Boolean(a.airborne)) : 0) || a.x - b.x)[0];
+}
+
+export function getShotTime(lastShotAt: number, fireRateMs: number, elapsed: number, preserveCadence = false): number | null {
+  if (elapsed - lastShotAt + 0.000001 < fireRateMs) return null;
+  // Preserve fractional fire periods on the fixed 50 ms clock, while allowing
+  // at most one volley per tick after an idle period rather than a catch-up burst.
+  return preserveCadence && elapsed - lastShotAt < fireRateMs * 2 ? lastShotAt + fireRateMs : elapsed;
 }
 
 export function isProjectileInRange(shot: ProjectileEntity) {
   return shot.maxX === undefined || shot.x < shot.maxX;
 }
 
-export function canProjectileHit(shot: ProjectileEntity, zombie: Pick<ZombieEntity, 'row' | 'x'>) {
+export function canProjectileHit(shot: ProjectileEntity, zombie: Pick<ZombieEntity, 'row' | 'x' | 'airborne'>) {
   return isProjectileInRange(shot)
+    && Boolean(shot.airborne) === Boolean(zombie.airborne)
     && zombie.row === shot.row
     && zombie.x >= shot.x - 0.25
     && zombie.x <= shot.x + 0.38

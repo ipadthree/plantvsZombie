@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PLANTS, ZOMBIES } from './catalog';
-import { advanceZombie, applySlow, canProjectileHit, canShootAtZombie, getDevourDamage, getFirePhase, hasZombieReachedHouse, isProjectileInRange, stepFirePlant } from './combat';
+import { advanceZombie, applySlow, canProjectileHit, getDevourDamage, getFirePhase, getProjectileTarget, getShotTime, hasZombieReachedHouse, isProjectileInRange, stepFirePlant } from './combat';
 import { DIFFICULTIES, DIFFICULTY_OPTIONS, TOTAL_WAVES, assignSpawnRows, getKillsBeforeWave, getSpawnDelayMs, getSpawnGroup, getSpawnMembers, getTotalZombies, getWaveCounts } from './difficulty';
 import { applyTntImpacts, getBossImage, landImps, stepBossAbilities, TNT_BLAST_MS } from './boss';
 import { advanceRollingBalls, applyMissileImpacts, launchMissiles, MISSILE_IMPACT_MS, releaseLaneBalls, resolveZombieDefeats } from './enemies';
@@ -65,6 +65,9 @@ export default function Game() {
     });
     const loadout = ZOMBIES['boss-zombie'].bossLoadout!;
     [ZOMBIES['boss-zombie'].image, loadout.tntEmptyImage, loadout.impsEmptyImage, loadout.emptyImage, loadout.tntImage, ZOMBIES['imp-zombie'].image].forEach((src) => {
+      const image = new window.Image(); image.src = src;
+    });
+    [PLANTS['bubble-shooter'].image, '/assets/bubble-shooter/anti-air.webp'].forEach((src) => {
       const image = new window.Image(); image.src = src;
     });
   }, []);
@@ -132,6 +135,7 @@ export default function Game() {
       if (event.key === '4') setSelectedPlant('watermelon-plant');
       if (event.key === '5') setSelectedPlant('mooshoom');
       if (event.key === '6') setSelectedPlant('fireshroom');
+      if (event.key === '7') setSelectedPlant('bubble-shooter');
       if (event.key === 'Escape') setSelectedPlant(null);
       const isControl = event.target instanceof HTMLElement && event.target.closest('button, a, input, select, textarea');
       if (event.key === ' ' && !isControl) { event.preventDefault(); togglePause(); }
@@ -152,7 +156,7 @@ export default function Game() {
     lastSimulatedAt.current = elapsed;
 
     const moveZombie = (zombie: ZombieEntity, blockers = plants) => {
-      const blocked = blockers.some((plant) => plant.row === zombie.row && Math.abs(zombie.x - (plant.col + 0.5)) < 0.52);
+      const blocked = !zombie.airborne && blockers.some((plant) => plant.row === zombie.row && Math.abs(zombie.x - (plant.col + 0.5)) < 0.52);
       return advanceZombie(zombie, blocked, ZOMBIES[zombie.type].speed, elapsed, TICK_MS);
     };
     const movedZombies = zombies.map((zombie) => moveZombie(zombie));
@@ -176,6 +180,7 @@ export default function Game() {
         return {
           uid: serial.current++, type: definition.id, row: lanes[index], x: 9.25,
           health: maxHealth, maxHealth, biting: false, hitUntil: 0, slowUntil: 0, slowMultiplier: 1,
+          airborne: definition.airborne,
         };
       });
       setSpawned((value) => value + group.count);
@@ -222,7 +227,7 @@ export default function Game() {
       if (definition.attackMode !== 'devour' || plant.digestUntil > elapsed) return;
       const target = armedZombies
         .filter((zombie) => !claimedZombies.has(zombie.uid)
-          && zombie.health > 0 && zombie.x <= COLS - 0.5
+          && zombie.health > 0 && !zombie.airborne && zombie.x <= COLS - 0.5
           && zombie.row === plant.row
           && zombie.x >= plant.col + 0.15
           && Math.abs(zombie.x - (plant.col + 0.5)) <= definition.devourRange)
@@ -246,7 +251,7 @@ export default function Game() {
     intactPlants.forEach((plant) => {
       const definition = PLANTS[plant.type];
       if (definition.attackMode !== 'fire') return;
-      const attacker = armedZombies.find((zombie) => !claimedZombies.has(zombie.uid) && zombie.row === plant.row && Math.abs(zombie.x - (plant.col + 0.5)) < 0.52);
+      const attacker = armedZombies.find((zombie) => !zombie.airborne && !claimedZombies.has(zombie.uid) && zombie.row === plant.row && Math.abs(zombie.x - (plant.col + 0.5)) < 0.52);
       if (attacker && plant.health <= ZOMBIES[attacker.type].damagePerSecond * TICK_MS / 1000) return;
       const update = stepFirePlant(plant, definition, armedZombies.filter((zombie) => !claimedZombies.has(zombie.uid)), elapsed, TICK_MS, COLS);
       fireUpdates.set(plant.uid, update.plant);
@@ -255,7 +260,7 @@ export default function Game() {
 
     const newShots: ProjectileEntity[] = [];
     const damaged = intactPlants.map((plant) => {
-      const attacker = armedZombies.find((zombie) => !claimedZombies.has(zombie.uid) && zombie.row === plant.row && Math.abs(zombie.x - (plant.col + 0.5)) < 0.52);
+      const attacker = armedZombies.find((zombie) => !zombie.airborne && !claimedZombies.has(zombie.uid) && zombie.row === plant.row && Math.abs(zombie.x - (plant.col + 0.5)) < 0.52);
       const nextPlant = attacker ? { ...plant, health: plant.health - ZOMBIES[attacker.type].damagePerSecond * TICK_MS / 1000 } : plant;
       if (devours.has(plant.uid)) {
         const definition = PLANTS[plant.type];
@@ -270,19 +275,22 @@ export default function Game() {
     damaged.forEach((plant) => {
       const definition = PLANTS[plant.type];
       if (definition.attackMode !== 'projectile') return;
-      const hasTarget = armedZombies.some((zombie) => !claimedZombies.has(zombie.uid) && canShootAtZombie(plant, definition, zombie, COLS));
-      if (hasTarget && elapsed - plant.lastShotAt >= definition.fireRateMs) {
-        plant.lastShotAt = elapsed;
+      const target = getProjectileTarget(plant, definition, armedZombies.filter((zombie) => !claimedZombies.has(zombie.uid)), COLS);
+      plant.aimingAirborne = Boolean(target?.airborne);
+      const shotTime = getShotTime(plant.lastShotAt, definition.fireRateMs, elapsed, definition.projectileKind === 'bubble');
+      if (target && shotTime !== null) {
+        plant.lastShotAt = shotTime;
         plant.pulseUntil = elapsed + 180;
         const volley = Array.from({ length: definition.projectilesPerVolley }, (_, index) => ({
           uid: serial.current++,
           row: plant.row,
-          x: plant.col + 0.78 - index * 0.22,
+          x: plant.col + (definition.projectileKind === 'bubble' ? .35 : .78) - index * 0.22,
           damage: definition.projectileDamage,
           kind: definition.projectileKind,
           speed: definition.projectileSpeed,
           maxX: definition.attackRange === undefined ? undefined : plant.col + definition.attackRange,
           slowEffect: definition.slowEffect,
+          airborne: Boolean(target.airborne),
         }));
         newShots.push(...volley);
       }
@@ -355,7 +363,8 @@ export default function Game() {
     if (energy < definition.cost) { setNotice(`You need ${definition.cost - energy} more sun.`); return; }
     setEnergy((value) => value - definition.cost);
     setPlants((current) => [...current, {
-      uid: serial.current++, type: definition.id, row, col, health: definition.health, lastShotAt: elapsed - 600, pulseUntil: 0, digestUntil: 0,
+      uid: serial.current++, type: definition.id, row, col, health: definition.health,
+      lastShotAt: elapsed - (definition.attackMode === 'projectile' && definition.projectileKind === 'bubble' ? definition.fireRateMs : 600), pulseUntil: 0, digestUntil: 0,
     }]);
     setNotice(`${definition.name} planted in lane ${row + 1}.`);
   };
@@ -428,7 +437,12 @@ export default function Game() {
             <span><b>Fireshroom</b><small>2-tile fire · 3s burn · 5s rest</small></span>
             <em>{PLANTS.fireshroom.cost}</em>
           </button>
-          <div className="field-notes"><b>FIELD NOTES</b><p>Boss Zombie joins the final wave in Hard and Crazy. Watch for TNT blasts and Imp reinforcements!</p></div>
+          <button className={`seed-card ${selectedPlant === 'bubble-shooter' ? 'selected' : ''} ${energy < PLANTS['bubble-shooter'].cost ? 'unaffordable' : ''}`} onClick={() => setSelectedPlant((value) => value === 'bubble-shooter' ? null : 'bubble-shooter')} aria-pressed={selectedPlant === 'bubble-shooter'} title={PLANTS['bubble-shooter'].description}>
+            <img src="/assets/bubble-shooter/icon.webp" alt="" />
+            <span><b>Bubble Shooter</b><small>3× fire rate · ground &amp; air</small></span>
+            <em>{PLANTS['bubble-shooter'].cost}</em>
+          </button>
+          <div className="field-notes"><b>FIELD NOTES</b><p>Bubble Shooter fires three times as fast as Sprout Scout. Its top extends when targeting flying enemies.</p></div>
         </aside>
 
         <div className="stage-frame">
@@ -448,9 +462,9 @@ export default function Game() {
                 const devouring = definition.attackMode === 'devour' && plant.pulseUntil > elapsed;
                 const digesting = definition.attackMode === 'devour' && plant.digestUntil > elapsed;
                 const firePhase = definition.attackMode === 'fire' ? getFirePhase(plant, definition, elapsed) : null;
-                const image = definition.attackMode === 'fire' ? firePhase === 'firing' ? definition.firingImage : firePhase === 'recharging' ? definition.rechargeImage : definition.image : definition.attackMode === 'devour' && digesting && !devouring ? definition.digestImage : definition.image;
-                return <div className={`plant entity ${definition.attackMode === 'projectile' && plant.pulseUntil > elapsed ? 'firing' : ''} ${devouring ? 'devouring' : ''} ${digesting && !devouring ? 'digesting' : ''}`} key={plant.uid} style={{ left: `${(plant.col + .5) / COLS * 100}%`, top: `${(plant.row + .5) / ROWS * 100}%` }}>
-                  <img src={image} alt={`${definition.name}${firePhase === 'firing' ? ' (firing)' : firePhase === 'recharging' ? ' (recharging)' : ''}`} draggable={false} />
+                const image = definition.attackMode === 'projectile' && plant.aimingAirborne && definition.airborneImage ? definition.airborneImage : definition.attackMode === 'fire' ? firePhase === 'firing' ? definition.firingImage : firePhase === 'recharging' ? definition.rechargeImage : definition.image : definition.attackMode === 'devour' && digesting && !devouring ? definition.digestImage : definition.image;
+                return <div className={`plant entity ${plant.type} ${plant.aimingAirborne ? 'aiming-airborne' : ''} ${definition.attackMode === 'projectile' && plant.pulseUntil > elapsed ? 'firing' : ''} ${devouring ? 'devouring' : ''} ${digesting && !devouring ? 'digesting' : ''}`} key={plant.uid} style={{ left: `${(plant.col + .5) / COLS * 100}%`, top: `${(plant.row + .5) / ROWS * 100}%` }}>
+                  <img src={image} alt={`${definition.name}${plant.aimingAirborne ? ' (anti-air)' : ''}${firePhase === 'firing' ? ' (firing)' : firePhase === 'recharging' ? ' (recharging)' : ''}`} draggable={false} />
                   {plant.health < definition.health && <span className="health"><i style={{ width: `${plant.health / definition.health * 100}%` }} /></span>}
                   {digesting && !devouring && <span className="digest-timer">{Math.max(1, Math.ceil((plant.digestUntil - elapsed) / 1000))}s</span>}
                   {firePhase === 'recharging' && <span className="digest-timer">{Math.ceil((plant.rechargeUntil! - elapsed) / 1000)}s</span>}
@@ -502,7 +516,7 @@ export default function Game() {
                 const recharging = Boolean(definition.missiles && (zombie.missileReadyAt ?? 0) > elapsed);
                 const launching = recharging && elapsed < zombie.missileReadyAt! - definition.missiles!.rechargeMs + definition.missiles!.flightMs;
                 const image = definition.bossLoadout ? getBossImage(zombie, definition, elapsed) : definition.laneBall && zombie.ballReleased ? definition.laneBall.releasedImage : recharging ? definition.rechargeImage : attackFrame ? definition.attackImage : definition.image;
-                return <div className={`zombie entity ${zombie.type} ${zombie.biting ? 'biting' : ''} ${slowed ? 'slowed' : ''} ${launching ? 'launching' : ''} ${(zombie.bossPulseUntil ?? 0) > elapsed ? 'boss-launching' : ''} ${zombie.hitUntil > elapsed ? 'hit' : ''}`} key={zombie.uid} style={{ left: `${(zombie.x + .5) / COLS * 100}%`, top: `${(zombie.row + 1) / ROWS * 100}%` }}>
+                return <div className={`zombie entity ${zombie.type} ${zombie.airborne ? 'airborne' : ''} ${zombie.biting ? 'biting' : ''} ${slowed ? 'slowed' : ''} ${launching ? 'launching' : ''} ${(zombie.bossPulseUntil ?? 0) > elapsed ? 'boss-launching' : ''} ${zombie.hitUntil > elapsed ? 'hit' : ''}`} key={zombie.uid} style={{ left: `${(zombie.x + .5) / COLS * 100}%`, top: `${(zombie.row + (zombie.airborne ? .2 : 1)) / ROWS * 100}%` }}>
                   <img src={image} alt={`${definition.name}${zombie.ballReleased ? ' (ball released)' : ''}${recharging ? ' (recharging)' : ''}${slowed ? ' (slowed)' : ''}`} draggable={false} />
                   <span className="health enemy-health"><i style={{ width: `${Math.max(0, zombie.health / zombie.maxHealth * 100)}%` }} /></span>
                   {(definition.laneBall || definition.bossLoadout) && <span className="boss-badge">BOSS · {Math.ceil(zombie.health)} HP</span>}
@@ -511,7 +525,7 @@ export default function Game() {
                   {slowed && <span className="slow-status">SLOW</span>}
                 </div>;
               })}
-              {projectiles.map((shot) => <span className={`projectile ${shot.kind}`} key={shot.uid} style={{ left: `${(shot.x + .5) / COLS * 100}%`, top: `${(shot.row + .5) / ROWS * 100}%` }} />)}
+              {projectiles.map((shot) => <span className={`projectile ${shot.kind} ${shot.airborne ? 'airborne' : ''}`} key={shot.uid} style={{ left: `${(shot.x + .5) / COLS * 100}%`, top: `${(shot.row + (shot.airborne ? -.3 : shot.kind === 'bubble' ? .43 : .5)) / ROWS * 100}%` }} />)}
               {suns.map((sun) => <button className="falling-sun" key={sun.uid} style={{ left: `${sun.x}%`, top: `${sun.y}%` }} onClick={() => collectSun(sun)} aria-label={`Collect ${sun.value} sun`}>☀<small>+{sun.value}</small></button>)}
               </div>
               {status !== 'playing' && <div className="game-overlay" role={status === 'lost' ? 'alertdialog' : 'dialog'} aria-modal="true" aria-labelledby="game-overlay-title">
@@ -523,7 +537,7 @@ export default function Game() {
             </div>
           </div>
           <div className="stage-footer" role="status" aria-live="polite">
-            <span><kbd>1–6</kbd> Pick plant</span><span><kbd>Click</kbd> Place</span><span><kbd>Space</kbd> Pause</span>
+            <span><kbd>1–7</kbd> Pick plant</span><span><kbd>Click</kbd> Place</span><span><kbd>Space</kbd> Pause</span>
             <p>{notice}</p>
             <strong>{spawned < scriptedZombiesThisWave ? `Wave ${currentWave} · next zombie ${nextSpawn}s` : currentWave === TOTAL_WAVES ? 'Final wave deployed' : `Wave ${currentWave} fully deployed`}</strong>
           </div>
